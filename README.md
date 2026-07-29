@@ -1,51 +1,47 @@
 # NewDeaf
 
-Android-приложение для просмотра и скачивания фильмов с [newdeaf.top](https://newdeaf.top/) — каталог, поиск, жанры, онлайн-плеер сайта и офлайн-библиотека.
+Android app for browsing and downloading movies from [newdeaf.top](https://newdeaf.top/) — catalog, search, genres, the site’s online player, and an offline library.
 
-## Стек
+## Stack
 
 - Expo (React Native) + TypeScript
 - Expo Router
-- WebView (оригинальный плеер stloadi)
-- expo-video + локальный HLS для офлайна
-- SQLite для метаданных загрузок
-- Moti / Reanimated для анимаций
+- WebView (original stloadi player)
+- expo-video + local HLS for offline playback
+- SQLite for download metadata
+- Moti / Reanimated for animations
 
-## Запуск
+## Getting started
 
 ```bash
 npm install
 npm run android
 ```
 
-`npm run android` устанавливает debug-сборку для разработки. Она загружает
-JavaScript с Metro и поэтому не запускается самостоятельно, если Metro остановлен.
+`npm run android` installs a debug build for development. It loads JavaScript from Metro, so it will not run on its own if Metro is stopped.
 
-Запуск Metro для разработки:
+Start Metro for development:
 
 ```bash
 npm start
 ```
 
-Для автономной сборки, которая содержит JavaScript-бандл и не зависит от Metro:
+For a standalone build that includes the JavaScript bundle and does not depend on Metro:
 
 ```bash
 npm run android:standalone
 ```
 
-Команда соберёт release-вариант и установит его на выбранное Android-устройство
-или эмулятор. Готовый APK находится в
-`android/app/build/outputs/apk/release/app-release.apk`.
+This builds the release variant and installs it on the selected Android device or emulator. The APK is at `android/app/build/outputs/apk/release/app-release.apk`.
 
-Release-вариант в этом проекте подписан локальным debug-ключом и предназначен
-для личной установки и тестирования, а не для публикации в Google Play.
+The release variant in this project is signed with the local debug key and is intended for personal install and testing, not for Google Play publication.
 
-## Функции
+## Features
 
-- Каталог новинок с пагинацией
-- Поиск и фильтр по жанрам
-- Карточка фильма: описание, рейтинги KP/IMDb
-- Онлайн-просмотр с качеством / озвучкой / субтитрами (плеер сайта)
-- Скачивание выбранного качества и озвучки + субтитры
-- Офлайн-просмотр скачанных фильмов с субтитрами
-- Адаптив для планшетов
+- New releases catalog with pagination
+- Search and genre filters
+- Movie details: description, KP/IMDb ratings
+- Online playback with quality / audio track / subtitles (site player)
+- Download selected quality and audio track + subtitles
+- Offline playback of downloaded movies with subtitles
+- Tablet-friendly layout
