@@ -22,6 +22,12 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   if (!names.has('youtubeUrl')) {
     await db.execAsync('ALTER TABLE downloads ADD COLUMN youtubeUrl TEXT');
   }
+  if (!names.has('season')) {
+    await db.execAsync('ALTER TABLE downloads ADD COLUMN season INTEGER');
+  }
+  if (!names.has('episode')) {
+    await db.execAsync('ALTER TABLE downloads ADD COLUMN episode INTEGER');
+  }
 }
 
 async function getDb() {
@@ -51,7 +57,9 @@ async function getDb() {
           subtitleUrl TEXT,
           source TEXT NOT NULL DEFAULT 'movie',
           mediaKind TEXT NOT NULL DEFAULT 'hls',
-          youtubeUrl TEXT
+          youtubeUrl TEXT,
+          season INTEGER,
+          episode INTEGER
         );
       `);
       await migrate(db);
@@ -89,6 +97,8 @@ function rowToRecord(row: Record<string, unknown>): DownloadRecord {
     source,
     mediaKind,
     youtubeUrl: row.youtubeUrl ? String(row.youtubeUrl) : undefined,
+    season: row.season != null ? Number(row.season) : undefined,
+    episode: row.episode != null ? Number(row.episode) : undefined,
   };
 }
 
@@ -116,8 +126,8 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       id, movieId, title, posterUrl, audioLabel, quality, subtitleLabel,
       status, progress, error, videoDir, playlistPath, subtitlePath,
       createdAt, updatedAt, playerUrl, hlsUrl, subtitleUrl,
-      source, mediaKind, youtubeUrl
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      source, mediaKind, youtubeUrl, season, episode
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,
       posterUrl=excluded.posterUrl,
@@ -136,7 +146,9 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       subtitleUrl=excluded.subtitleUrl,
       source=excluded.source,
       mediaKind=excluded.mediaKind,
-      youtubeUrl=excluded.youtubeUrl
+      youtubeUrl=excluded.youtubeUrl,
+      season=excluded.season,
+      episode=excluded.episode
     `,
     [
       record.id,
@@ -160,6 +172,8 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       record.source,
       record.mediaKind,
       record.youtubeUrl ?? null,
+      record.season ?? null,
+      record.episode ?? null,
     ]
   );
 }

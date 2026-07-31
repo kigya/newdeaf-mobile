@@ -26,6 +26,8 @@ export type DownloadRecord = {
   source: DownloadSource;
   mediaKind: DownloadMediaKind;
   youtubeUrl?: string;
+  season?: number;
+  episode?: number;
 };
 
 export type DownloadRequest = {
@@ -38,6 +40,8 @@ export type DownloadRequest = {
   subtitleLabel: string;
   hlsUrl: string;
   subtitleUrl: string;
+  season?: number;
+  episode?: number;
 };
 
 export type YoutubeDownloadRequest = {
@@ -47,6 +51,6 @@ export type YoutubeDownloadRequest = {
   posterUrl?: string;
   quality: string;
   mediaKind: DownloadMediaKind;
-  /** Progressive MP4 URL or HLS master URL from Piped. */
+  /** Progressive MP4 URL or HLS master URL from Piped/Invidious. */
   streamUrl: string;
 };

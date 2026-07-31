@@ -7,6 +7,8 @@ export type MovieSummary = {
   href: string;
   kpRating?: string;
   imdbRating?: string;
+  /** True when card genre list includes «Сериалы» or title/slug looks like a series. */
+  isSeries?: boolean;
 };
 
 export type MovieDetail = MovieSummary & {
@@ -21,6 +23,8 @@ export type MovieDetail = MovieSummary & {
   playerToken?: string;
   tokenMovie?: string;
   translationId?: string;
+  season?: number;
+  episode?: number;
   likes?: string;
   trailerUrl?: string;
   trailerYoutubeId?: string;
@@ -58,7 +62,7 @@ export type StreamPayload = {
   time?: number;
 };
 
-export type FileListEntry = {
+export type PlayerFileListEntry = {
   id: number;
   id_file?: string | number | null;
   translation: string;
@@ -66,8 +70,21 @@ export type FileListEntry = {
   quality: string;
   id_quality: number;
   uhd?: number;
-  typeList?: string;
+  seasons?: number;
+  episode?: number;
+  directors_cut?: boolean;
+  top_bought?: unknown;
 };
+
+/** season -> episode -> translationKey -> entry */
+export type PlayerFileList = {
+  type: 'serial' | 'movie';
+  active?: PlayerFileListEntry;
+  all: Record<string, Record<string, Record<string, PlayerFileListEntry>>>;
+};
+
+/** @deprecated use PlayerFileListEntry */
+export type FileListEntry = PlayerFileListEntry;
 
 export const BASE_URL = 'https://newdeaf.top';
 

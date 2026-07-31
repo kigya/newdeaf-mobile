@@ -11,6 +11,7 @@ import { downloadHlsToDirectory, downloadTextFile } from './hls';
 import { downloadProgressiveFile } from './progressive';
 import type { DownloadRecord, DownloadRequest, YoutubeDownloadRequest } from './types';
 import { resolveYoutubeStream } from './youtube';
+import { t } from '@/src/i18n';
 
 type DownloadsState = {
   items: DownloadRecord[];
@@ -26,9 +27,11 @@ type DownloadsState = {
 
 const PROGRESS_THROTTLE_MS = 250;
 
-function makeId(movieId: string, quality: string, audioLabel: string) {
+function makeId(movieId: string, quality: string, audioLabel: string, season?: number, episode?: number) {
   const safeAudio = audioLabel.replace(/[^\wа-яА-ЯёЁ]+/gi, '_').slice(0, 40);
-  return `${movieId}_${quality}_${safeAudio}_${Date.now()}`;
+  const ep =
+    season != null && episode != null ? `_s${season}e${episode}` : '';
+  return `${movieId}${ep}_${quality}_${safeAudio}_${Date.now()}`;
 }
 
 function makeYoutubeId(videoId: string) {
@@ -162,6 +165,8 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
       mediaKind: 'hls',
+      season: request.season,
+      episode: request.episode,
     };
 
     const prior = await getDownload(id);
@@ -219,7 +224,7 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     await persist(current);
     patchItemInStore(current, null);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Ошибка загрузки';
+    const message = error instanceof Error ? error.message : t('store.downloadError');
     await failDownload(id, message);
   } finally {
     await stopForegroundIfIdle();
@@ -320,7 +325,7 @@ async function runYoutubeDownloadJob(
     await persist(current);
     patchItemInStore(current, null);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Ошибка загрузки';
+    const message = error instanceof Error ? error.message : t('store.downloadError');
     await failDownload(id, message);
   } finally {
     await stopForegroundIfIdle();
@@ -342,7 +347,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       const updated: DownloadRecord = {
         ...p,
         status: 'failed',
-        error: 'Загрузка прервалась. Запустите снова.',
+        error: t('store.interrupted'),
         updatedAt: Date.now(),
       };
       await persist(updated);
@@ -358,7 +363,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   },
 
   enqueue: async (request) => {
-    const id = makeId(request.movieId, request.quality, request.audioLabel);
+    const id = makeId(
+      request.movieId,
+      request.quality,
+      request.audioLabel,
+      request.season,
+      request.episode
+    );
     const now = Date.now();
     const record: DownloadRecord = {
       id,
@@ -377,6 +388,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
       mediaKind: 'hls',
+      season: request.season,
+      episode: request.episode,
     };
     await persist(record);
     patchItemInStore(record, id);
@@ -424,12 +437,12 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   retry: async (id) => {
     const item = await getDownload(id);
     if (!item) {
-      throw new Error('Загрузка не найдена');
+      throw new Error(t('store.notFound'));
     }
 
     if (item.source === 'youtube') {
       if (!item.youtubeUrl) {
-        throw new Error('Нет сохранённой ссылки YouTube для повторной загрузки');
+        throw new Error(t('store.noYoutubeUrl'));
       }
       const resolved = await resolveYoutubeStream(item.youtubeUrl);
       const request: YoutubeDownloadRequest = {
@@ -461,7 +474,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     }
 
     if (!item.hlsUrl || !item.subtitleUrl || !item.playerUrl) {
-      throw new Error('Нет сохранённых параметров для повторной загрузки');
+      throw new Error(t('store.noRetryParams'));
     }
     const request: DownloadRequest = {
       movieId: item.movieId,
@@ -473,6 +486,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       subtitleLabel: item.subtitleLabel,
       hlsUrl: item.hlsUrl,
       subtitleUrl: item.subtitleUrl,
+      season: item.season,
+      episode: item.episode,
     };
     const updated: DownloadRecord = {
       ...item,

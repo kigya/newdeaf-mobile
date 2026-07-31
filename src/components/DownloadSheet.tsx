@@ -16,6 +16,7 @@ import { pickSubtitleTrack } from '@/src/downloads/hls';
 import { useDownloadsStore } from '@/src/downloads/store';
 import type { DownloadRecord } from '@/src/downloads/types';
 import { StreamResolver } from '@/src/player/StreamResolver';
+import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 type Props = {
@@ -25,6 +26,8 @@ type Props = {
   title: string;
   posterUrl?: string;
   playerUrl: string;
+  season?: number;
+  episode?: number;
 };
 
 function qualityOptions(source: HlsSource | undefined): string[] {
@@ -80,7 +83,16 @@ function findAnyExistingMovie(
 }
 
 /** In-screen sheet — no RN Modal (avoids Android back/overlay bugs with WebView). */
-export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, playerUrl }: Props) {
+export function DownloadSheet({
+  visible,
+  onClose,
+  movieId,
+  title,
+  posterUrl,
+  playerUrl,
+  season,
+  episode,
+}: Props) {
   const insets = useSafeAreaInsets();
   const enqueue = useDownloadsStore((s) => s.enqueue);
   const items = useDownloadsStore((s) => s.items);
@@ -101,7 +113,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
   const onResolved = useCallback((data: StreamPayload) => {
     if (!data?.hlsSource?.length) {
-      setError('Потоки получены пустыми. Попробуйте ещё раз.');
+      setError(t('downloadSheet.emptyStreams'));
       return;
     }
     setPayload(data);
@@ -114,7 +126,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
     const preferred = pickSubtitleTrack(data.tracks ?? []);
     if (preferred) {
       const idx = data.tracks.findIndex(
-        (t) => t.src === preferred.src && t.label === preferred.label
+        (tr) => tr.src === preferred.src && tr.label === preferred.label
       );
       setSubtitleIndex(idx >= 0 ? idx : 0);
     }
@@ -122,12 +134,12 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
   const doEnqueue = async () => {
     if (!selected || !selectedSubtitle) {
-      setError('Нет доступной озвучки или субтитров для скачивания');
+      setError(t('downloadSheet.noTracks'));
       return;
     }
     const hlsUrl = selected.quality[quality] ?? selected.quality[Object.keys(selected.quality)[0]];
     if (!hlsUrl) {
-      setError('Выбранное качество недоступно');
+      setError(t('downloadSheet.qualityUnavailable'));
       return;
     }
     setStarting(true);
@@ -142,10 +154,12 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
         subtitleLabel: selectedSubtitle.label,
         hlsUrl,
         subtitleUrl: selectedSubtitle.src,
+        season,
+        episode,
       });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось начать загрузку');
+      setError(e instanceof Error ? e.message : t('downloadSheet.startFailed'));
     } finally {
       setStarting(false);
     }
@@ -153,7 +167,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
   const startDownload = () => {
     if (!selected || !selectedSubtitle) {
-      setError('Нет доступной озвучки или субтитров для скачивания');
+      setError(t('downloadSheet.noTracks'));
       return;
     }
     const exact = findExistingSameTracks(items, movieId, selected.label, selectedSubtitle.label);
@@ -173,13 +187,16 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
   if (!visible) return null;
 
+  const sheetTitle =
+    season != null && episode != null ? t('downloadSheet.titleEpisode') : t('downloadSheet.title');
+
   return (
     <View style={styles.root} pointerEvents="box-none">
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Text style={styles.title}>Скачать фильм</Text>
+          <Text style={styles.title}>{sheetTitle}</Text>
           <Pressable onPress={onClose} hitSlop={10}>
             <Ionicons name="close" size={24} color={colors.textSecondary} />
           </Pressable>
@@ -190,6 +207,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
         {!payload && !error ? (
           <StreamResolver
+            key={playerUrl}
             playerUrl={playerUrl}
             onResolved={onResolved}
             onError={(message) => setError(message)}
@@ -200,7 +218,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
         {payload ? (
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-            <Text style={styles.section}>Озвучка</Text>
+            <Text style={styles.section}>{t('downloadSheet.audio')}</Text>
             <View style={styles.chips}>
               {sources.map((source, index) => {
                 const active = index === audioIndex;
@@ -227,7 +245,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
               })}
             </View>
 
-            <Text style={styles.section}>Качество</Text>
+            <Text style={styles.section}>{t('downloadSheet.quality')}</Text>
             <View style={styles.chips}>
               {qualities.map((q) => {
                 const active = q === quality;
@@ -243,7 +261,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
               })}
             </View>
 
-            <Text style={styles.section}>Субтитры</Text>
+            <Text style={styles.section}>{t('downloadSheet.subtitles')}</Text>
             {tracks.length ? (
               <View style={styles.chips}>
                 {tracks.map((track, index) => {
@@ -267,14 +285,12 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
             ) : (
               <View style={styles.subInfo}>
                 <Ionicons name="text" size={18} color={colors.danger} />
-                <Text style={styles.subText}>Субтитры не найдены</Text>
+                <Text style={styles.subText}>{t('downloadSheet.noSubtitles')}</Text>
               </View>
             )}
 
             {Number(quality) >= 1080 ? (
-              <Text style={styles.warn}>
-                Высокое качество займёт много места. Рекомендуем 720p.
-              </Text>
+              <Text style={styles.warn}>{t('downloadSheet.highQualityWarn')}</Text>
             ) : null}
 
             <Pressable
@@ -287,7 +303,7 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
               ) : (
                 <>
                   <Ionicons name="download-outline" size={20} color={colors.black} />
-                  <Text style={styles.ctaText}>Скачать</Text>
+                  <Text style={styles.ctaText}>{t('common.download')}</Text>
                 </>
               )}
             </Pressable>
@@ -297,17 +313,29 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
       <ConfirmDialog
         visible={dupDialog === 'exact'}
-        title="Уже скачано"
+        title={t('downloadSheet.alreadyTitle')}
         message={
           dupExisting
             ? dupExisting.status === 'failed'
-              ? `«${title}» уже есть с озвучкой «${dupExisting.audioLabel}» и субтитрами «${dupExisting.subtitleLabel}» (ошибка загрузки). Удалите запись или нажмите «Снова» в Загрузках.`
+              ? t('downloadSheet.alreadyFailed', {
+                  title,
+                  audio: dupExisting.audioLabel,
+                  subs: dupExisting.subtitleLabel,
+                })
               : dupExisting.status === 'completed'
-                ? `«${title}» уже есть с озвучкой «${dupExisting.audioLabel}» и субтитрами «${dupExisting.subtitleLabel}». Повторная загрузка не нужна.`
-                : `«${title}» уже качается или в очереди с озвучкой «${dupExisting.audioLabel}» и субтитрами «${dupExisting.subtitleLabel}».`
+                ? t('downloadSheet.alreadyDone', {
+                    title,
+                    audio: dupExisting.audioLabel,
+                    subs: dupExisting.subtitleLabel,
+                  })
+                : t('downloadSheet.alreadyQueued', {
+                    title,
+                    audio: dupExisting.audioLabel,
+                    subs: dupExisting.subtitleLabel,
+                  })
             : undefined
         }
-        confirmLabel="Понятно"
+        confirmLabel={t('common.gotIt')}
         confirmOnly
         onConfirm={() => {
           setDupDialog(null);
@@ -321,14 +349,17 @@ export function DownloadSheet({ visible, onClose, movieId, title, posterUrl, pla
 
       <ConfirmDialog
         visible={dupDialog === 'other'}
-        title="Фильм уже скачан"
+        title={t('downloadSheet.otherTitle')}
         message={
           dupExisting
-            ? `Уже есть копия с озвучкой «${dupExisting.audioLabel}» и субтитрами «${dupExisting.subtitleLabel}». Скачать ещё с выбранными дорожками?`
+            ? t('downloadSheet.otherMessage', {
+                audio: dupExisting.audioLabel,
+                subs: dupExisting.subtitleLabel,
+              })
             : undefined
         }
-        confirmLabel="Скачать ещё"
-        cancelLabel="Отмена"
+        confirmLabel={t('downloadSheet.downloadAgain')}
+        cancelLabel={t('common.cancel')}
         onConfirm={() => {
           setDupDialog(null);
           setDupExisting(null);

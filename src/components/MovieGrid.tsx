@@ -1,8 +1,9 @@
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import type { MovieSummary } from '@/src/api/types';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
+import { t } from '@/src/i18n';
 import { colors, spacing } from '@/src/theme';
 
 import { EmptyState } from './EmptyState';
@@ -18,6 +19,11 @@ type Props = {
   ListHeaderComponent?: React.ReactElement | null;
   refreshing?: boolean;
   onRefresh?: () => void;
+  onScrollBeginDrag?: () => void;
+  keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
+  forceSeries?: boolean;
+  isDownloaded?: (movieId: string) => boolean;
+  onLongPressMovie?: (movie: MovieSummary) => void;
 };
 
 export function MovieGrid({
@@ -25,11 +31,16 @@ export function MovieGrid({
   loading,
   loadingMore,
   onEndReached,
-  emptyTitle = 'Ничего не найдено',
-  emptySubtitle = 'Попробуйте другой запрос или жанр',
+  emptyTitle = t('grid.emptyTitle'),
+  emptySubtitle = t('grid.emptySubtitle'),
   ListHeaderComponent,
   refreshing,
   onRefresh,
+  onScrollBeginDrag,
+  keyboardShouldPersistTaps = 'handled',
+  forceSeries,
+  isDownloaded,
+  onLongPressMovie,
 }: Props) {
   const { width, columns } = useBreakpoint();
   const gap = spacing.md;
@@ -63,6 +74,12 @@ export function MovieGrid({
       refreshing={refreshing}
       onRefresh={onRefresh}
       ListHeaderComponent={ListHeaderComponent}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+      keyboardDismissMode="on-drag"
+      onScrollBeginDrag={() => {
+        Keyboard.dismiss();
+        onScrollBeginDrag?.();
+      }}
       ListFooterComponent={
         loadingMore ? (
           <View style={styles.footer}>
@@ -75,7 +92,11 @@ export function MovieGrid({
           movie={item}
           index={index}
           width={cardWidth}
-          onPress={() =>
+          forceSeries={forceSeries}
+          showDownloaded={isDownloaded?.(item.id)}
+          onLongPress={onLongPressMovie ? () => onLongPressMovie(item) : undefined}
+          onPress={() => {
+            Keyboard.dismiss();
             router.push({
               pathname: '/movie/[id]',
               params: {
@@ -84,8 +105,8 @@ export function MovieGrid({
                 title: item.title,
                 posterUrl: item.posterUrl ?? '',
               },
-            })
-          }
+            });
+          }}
         />
       )}
     />
