@@ -59,6 +59,7 @@ export const ru = {
     audioSubs: 'Озвучка и субтитры',
     loadingTracks: 'Загружаем дорожки…',
     tracksFailed: 'Не удалось загрузить список дорожек',
+    tracksUnavailable: 'Дорожки недоступны для этого плеера — смотрите онлайн во встроенном плеере',
     audio: 'Озвучка',
     subtitles: 'Субтитры',
     trailer: 'Трейлер',
@@ -71,6 +72,9 @@ export const ru = {
     serial: 'Сериал',
     addFavorite: 'В избранное',
     removeFavorite: 'Убрать из избранного',
+    downloadedSection: 'В загрузках',
+    watchOffline: 'Смотреть офлайн',
+    downloadedTracks: '%{audio} · субтитры «%{subs}» · %{quality}p',
   },
   favorites: {
     title: 'Избранное',
@@ -142,6 +146,8 @@ export const ru = {
     resolving: 'Получаем потоки…',
     resolved: 'Потоки получены',
     timeout: 'Таймаут получения потоков. Попробуйте ещё раз.',
+    settings: 'Настройки',
+    buffering: 'Буферизация…',
   },
   offline: {
     fileNotFound: 'Файл не найден',
@@ -157,6 +163,7 @@ export const ru = {
   grid: {
     emptyTitle: 'Ничего не найдено',
     emptySubtitle: 'Попробуйте другой запрос или жанр',
+    watchedAt: 'просмотрено до %{time}',
   },
   store: {
     downloadError: 'Ошибка загрузки',
@@ -164,6 +171,7 @@ export const ru = {
     notFound: 'Загрузка не найдена',
     noYoutubeUrl: 'Нет сохранённой ссылки YouTube для повторной загрузки',
     noRetryParams: 'Нет сохранённых параметров для повторной загрузки',
+    retryNoStreams: 'Не удалось получить потоки для повтора',
     fileDownloadFailed: 'Не удалось скачать файл',
   },
   notFound: {

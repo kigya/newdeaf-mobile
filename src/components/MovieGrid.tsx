@@ -5,6 +5,7 @@ import type { MovieSummary } from '@/src/api/types';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
 import { t } from '@/src/i18n';
 import { colors, spacing } from '@/src/theme';
+import type { WatchProgressRecord } from '@/src/watch-progress/types';
 
 import { EmptyState } from './EmptyState';
 import { MovieCard } from './MovieCard';
@@ -23,6 +24,7 @@ type Props = {
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
   forceSeries?: boolean;
   isDownloaded?: (movieId: string) => boolean;
+  getWatchProgress?: (movieId: string) => WatchProgressRecord | undefined;
   onLongPressMovie?: (movie: MovieSummary) => void;
 };
 
@@ -40,6 +42,7 @@ export function MovieGrid({
   keyboardShouldPersistTaps = 'handled',
   forceSeries,
   isDownloaded,
+  getWatchProgress,
   onLongPressMovie,
 }: Props) {
   const { width, columns } = useBreakpoint();
@@ -94,6 +97,7 @@ export function MovieGrid({
           width={cardWidth}
           forceSeries={forceSeries}
           showDownloaded={isDownloaded?.(item.id)}
+          watchProgress={getWatchProgress?.(item.id)}
           onLongPress={onLongPressMovie ? () => onLongPressMovie(item) : undefined}
           onPress={() => {
             Keyboard.dismiss();

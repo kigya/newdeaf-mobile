@@ -7,6 +7,7 @@ import type { MovieSummary } from '@/src/api/types';
 import { MovieGrid } from '@/src/components/MovieGrid';
 import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
+import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 export default function GenreMoviesScreen() {
   const { slug, href, name } = useLocalSearchParams<{
@@ -14,6 +15,7 @@ export default function GenreMoviesScreen() {
     href?: string;
     name?: string;
   }>();
+  const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);
   const [movies, setMovies] = useState<MovieSummary[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,7 @@ export default function GenreMoviesScreen() {
         loading={loading}
         loadingMore={loadingMore}
         forceSeries={forceSeries}
+        getWatchProgress={getWatchProgress}
         onEndReached={() => {
           if (!hasMore || loadingMore || loading) return;
           setLoadingMore(true);

@@ -25,6 +25,8 @@ import {
 import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/api/types';
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
 import { DownloadSheet } from '@/src/components/DownloadSheet';
+import { listCompletedDownloads } from '@/src/downloads/match';
+import { useDownloadsStore } from '@/src/downloads/store';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
 import { t } from '@/src/i18n';
@@ -65,6 +67,7 @@ export default function MovieDetailScreen() {
   );
   const toggleFavorite = useFavoritesStore((s) => s.toggle);
   const clearProgress = useWatchProgressStore((s) => s.clear);
+  const downloads = useDownloadsStore((s) => s.items);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,29 +89,34 @@ export default function MovieDetailScreen() {
         if (detail.season) setSeason(detail.season);
         if (detail.episode) setEpisode(detail.episode);
         if (detail.playerUrl) {
-          setStreamLoading(true);
-          const fl = await fetchPlayerFileList(detail.playerUrl);
-          if (!cancelled && fl) {
-            setFileList(fl);
-            if (fl.type === 'serial') {
-              const seasons = listSeasons(fl);
-              const latest = await fetchLatestProgressForMovie(detail.id);
-              if (
-                latest?.season != null &&
-                latest.episode != null &&
-                seasons.includes(latest.season) &&
-                listEpisodes(fl, latest.season).includes(latest.episode)
-              ) {
-                setSeason(latest.season);
-                setEpisode(latest.episode);
-              } else {
-                const s = fl.active?.seasons ?? seasons[0] ?? 1;
-                const eps = listEpisodes(fl, s);
-                const e = fl.active?.episode ?? eps[0] ?? 1;
-                setSeason(s);
-                setEpisode(e);
+          setStreamLoading(detail.nativePlayer !== false);
+          if (detail.nativePlayer !== false) {
+            const fl = await fetchPlayerFileList(detail.playerUrl);
+            if (!cancelled && fl) {
+              setFileList(fl);
+              if (fl.type === 'serial') {
+                const seasons = listSeasons(fl);
+                const latest = await fetchLatestProgressForMovie(detail.id);
+                if (
+                  latest?.season != null &&
+                  latest.episode != null &&
+                  seasons.includes(latest.season) &&
+                  listEpisodes(fl, latest.season).includes(latest.episode)
+                ) {
+                  setSeason(latest.season);
+                  setEpisode(latest.episode);
+                } else {
+                  const s = fl.active?.seasons ?? seasons[0] ?? 1;
+                  const eps = listEpisodes(fl, s);
+                  const e = fl.active?.episode ?? eps[0] ?? 1;
+                  setSeason(s);
+                  setEpisode(e);
+                }
               }
             }
+          } else if (!cancelled) {
+            setStreamLoading(false);
+            setStreamError(t('movie.tracksUnavailable'));
           }
         }
       } catch (e) {
@@ -137,8 +145,20 @@ export default function MovieDetailScreen() {
     return movie.title;
   }, [movie, isSerial, season, episode, paramTitle]);
 
+  const offlineCopies = useMemo(() => {
+    if (!movie?.id) return [];
+    return listCompletedDownloads(
+      movie.id,
+      downloads,
+      isSerial ? season : undefined,
+      isSerial ? episode : undefined
+    );
+  }, [movie?.id, downloads, isSerial, season, episode]);
+
   const activePlayerUrl = useMemo(() => {
     if (!movie?.playerUrl) return undefined;
+    // Non-native embeds: use as-is (no season/episode rewrite).
+    if (movie.nativePlayer === false) return movie.playerUrl;
     if (!isSerial || !fileList) return movie.playerUrl;
     const entry = pickEpisodeEntry(
       fileList,
@@ -171,9 +191,7 @@ export default function MovieDetailScreen() {
       }
 
       const playerUrl =
-        time > 0
-          ? buildPlayerUrl(activePlayerUrl, { time })
-          : activePlayerUrl;
+        time > 0 ? buildPlayerUrl(activePlayerUrl, { time }) : activePlayerUrl;
 
       router.push({
         pathname: '/player/[id]',
@@ -221,8 +239,13 @@ export default function MovieDetailScreen() {
     if (!activePlayerUrl) return;
     setStream(null);
     setStreamError(null);
+    if (movie?.nativePlayer === false) {
+      setStreamLoading(false);
+      setStreamError(t('movie.tracksUnavailable'));
+      return;
+    }
     setStreamLoading(true);
-  }, [activePlayerUrl]);
+  }, [activePlayerUrl, movie?.nativePlayer]);
 
   const onStreamResolved = useCallback((data: StreamPayload) => {
     setStream(data);
@@ -424,7 +447,7 @@ export default function MovieDetailScreen() {
                   </View>
                 ) : null}
                 {streamError && !stream ? (
-                  <Text style={styles.tracksHint}>{t('movie.tracksFailed')}</Text>
+                  <Text style={styles.tracksHint}>{streamError}</Text>
                 ) : null}
                 {stream?.hlsSource?.length ? (
                   <>
@@ -456,7 +479,7 @@ export default function MovieDetailScreen() {
                     </View>
                   </>
                 ) : null}
-                {streamLoading && !stream ? (
+                {streamLoading && !stream && movie.nativePlayer !== false ? (
                   <View style={styles.hiddenResolver} pointerEvents="none">
                     <StreamResolver
                       key={activePlayerUrl}
@@ -506,6 +529,38 @@ export default function MovieDetailScreen() {
               <Text style={[styles.error, { paddingHorizontal: spacing.lg }]}>
                 {t('movie.noPlayer')}
               </Text>
+            ) : null}
+
+            {offlineCopies.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.downloadedSection')}</Text>
+                {offlineCopies.map((item) => (
+                  <View key={item.id} style={styles.offlineCard}>
+                    <View style={styles.offlineMeta}>
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      <Text style={styles.offlineTracks} numberOfLines={3}>
+                        {t('movie.downloadedTracks', {
+                          audio: item.audioLabel,
+                          subs: item.subtitleLabel,
+                          quality: item.quality,
+                        })}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.offlineBtn}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/offline/[downloadId]',
+                          params: { downloadId: item.id },
+                        })
+                      }
+                    >
+                      <Ionicons name="play-circle" size={18} color={colors.black} />
+                      <Text style={styles.offlineBtnText}>{t('movie.watchOffline')}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
             ) : null}
           </ScrollView>
 
@@ -656,6 +711,42 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     fontSize: 16,
     marginBottom: spacing.sm,
+  },
+  offlineCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  offlineMeta: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  offlineTracks: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  offlineBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  offlineBtnText: {
+    color: colors.black,
+    fontFamily: fonts.bold,
+    fontSize: 13,
   },
   body: {
     color: colors.textSecondary,

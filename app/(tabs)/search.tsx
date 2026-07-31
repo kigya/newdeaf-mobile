@@ -15,10 +15,12 @@ import { MovieGrid } from '@/src/components/MovieGrid';
 import { Screen } from '@/src/components/Screen';
 import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
+import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 const MIN_QUERY_LENGTH = 4;
 
 export default function SearchScreen() {
+  const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);
   const [query, setQuery] = useState('');
   const [movies, setMovies] = useState<MovieSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -89,6 +91,7 @@ export default function SearchScreen() {
       <MovieGrid
         movies={movies}
         loading={loading}
+        getWatchProgress={getWatchProgress}
         emptyTitle={searched ? t('search.emptyNone') : t('search.emptyStart')}
         emptySubtitle={
           error

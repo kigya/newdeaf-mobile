@@ -6,6 +6,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MovieSummary } from '@/src/api/types';
 import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
+import {
+  formatWatchTime,
+  isResumable,
+  type WatchProgressRecord,
+} from '@/src/watch-progress/types';
 
 type Props = {
   movie: MovieSummary;
@@ -15,6 +20,7 @@ type Props = {
   onLongPress?: () => void;
   forceSeries?: boolean;
   showDownloaded?: boolean;
+  watchProgress?: WatchProgressRecord | null;
 };
 
 export function MovieCard({
@@ -25,9 +31,22 @@ export function MovieCard({
   onLongPress,
   forceSeries,
   showDownloaded,
+  watchProgress,
 }: Props) {
   const height = Math.round(width * 1.48);
   const showSeries = forceSeries || Boolean(movie.isSeries);
+  const showProgress = isResumable(watchProgress);
+  const progressRatio = showProgress
+    ? watchProgress!.durationSec && watchProgress!.durationSec > 0
+      ? Math.min(1, Math.max(0.05, watchProgress!.positionSec / watchProgress!.durationSec))
+      : 0.15
+    : 0;
+
+  const labelParts = [movie.title];
+  if (showDownloaded) labelParts.push(t('favorites.downloaded'));
+  if (showProgress) {
+    labelParts.push(t('grid.watchedAt', { time: formatWatchTime(watchProgress!.positionSec) }));
+  }
 
   return (
     <MotiView
@@ -42,11 +61,7 @@ export function MovieCard({
         delayLongPress={380}
         style={({ pressed }) => [styles.card, pressed && styles.pressed]}
         accessibilityRole="button"
-        accessibilityLabel={
-          showDownloaded
-            ? `${movie.title}, ${t('favorites.downloaded')}`
-            : movie.title
-        }
+        accessibilityLabel={labelParts.join(', ')}
       >
         <View style={[styles.posterWrap, { height }]}>
           {movie.posterUrl ? (
@@ -84,6 +99,11 @@ export function MovieCard({
               ) : null}
             </View>
           )}
+          {showProgress ? (
+            <View style={styles.progressTrack} accessibilityElementsHidden>
+              <View style={[styles.progressFill, { width: `${Math.round(progressRatio * 100)}%` }]} />
+            </View>
+          ) : null}
         </View>
         <Text style={styles.title} numberOfLines={2}>
           {movie.title}
@@ -169,6 +189,18 @@ const styles = StyleSheet.create({
   },
   imdbText: {
     color: colors.black,
+  },
+  progressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
   },
   title: {
     marginTop: spacing.sm,

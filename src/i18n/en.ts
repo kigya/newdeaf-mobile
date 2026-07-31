@@ -61,6 +61,7 @@ export const en: TranslationKeys = {
     audioSubs: 'Audio & subtitles',
     loadingTracks: 'Loading tracks…',
     tracksFailed: 'Failed to load track list',
+    tracksUnavailable: 'Tracks unavailable for this player — watch online in the embedded player',
     audio: 'Audio',
     subtitles: 'Subtitles',
     trailer: 'Trailer',
@@ -73,6 +74,9 @@ export const en: TranslationKeys = {
     serial: 'Series',
     addFavorite: 'Add to favorites',
     removeFavorite: 'Remove from favorites',
+    downloadedSection: 'In downloads',
+    watchOffline: 'Watch offline',
+    downloadedTracks: '%{audio} · subs “%{subs}” · %{quality}p',
   },
   favorites: {
     title: 'Favorites',
@@ -144,6 +148,8 @@ export const en: TranslationKeys = {
     resolving: 'Fetching streams…',
     resolved: 'Streams ready',
     timeout: 'Timed out fetching streams. Try again.',
+    settings: 'Settings',
+    buffering: 'Buffering…',
   },
   offline: {
     fileNotFound: 'File not found',
@@ -159,6 +165,7 @@ export const en: TranslationKeys = {
   grid: {
     emptyTitle: 'Nothing found',
     emptySubtitle: 'Try another query or genre',
+    watchedAt: 'watched to %{time}',
   },
   store: {
     downloadError: 'Download error',
@@ -166,6 +173,7 @@ export const en: TranslationKeys = {
     notFound: 'Download not found',
     noYoutubeUrl: 'No saved YouTube link to retry',
     noRetryParams: 'No saved parameters to retry',
+    retryNoStreams: 'Could not resolve streams for retry',
     fileDownloadFailed: 'Failed to download file',
   },
   notFound: {

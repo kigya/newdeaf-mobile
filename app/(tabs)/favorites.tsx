@@ -9,12 +9,14 @@ import { useDownloadsStore } from '@/src/downloads/store';
 import { isMovieDownloaded } from '@/src/favorites/downloaded';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { t } from '@/src/i18n';
+import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 export default function FavoritesScreen() {
   const items = useFavoritesStore((s) => s.items);
   const hydrated = useFavoritesStore((s) => s.hydrated);
   const remove = useFavoritesStore((s) => s.remove);
   const downloads = useDownloadsStore((s) => s.items);
+  const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);
   const [pendingRemove, setPendingRemove] = useState<MovieSummary | null>(null);
 
   return (
@@ -26,6 +28,7 @@ export default function FavoritesScreen() {
           emptyTitle={t('favorites.emptyTitle')}
           emptySubtitle={t('favorites.emptySubtitle')}
           isDownloaded={(movieId) => isMovieDownloaded(movieId, downloads)}
+          getWatchProgress={getWatchProgress}
           onLongPressMovie={(movie) => setPendingRemove(movie)}
         />
       </View>

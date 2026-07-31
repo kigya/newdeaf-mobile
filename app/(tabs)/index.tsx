@@ -7,8 +7,10 @@ import { MovieGrid } from '@/src/components/MovieGrid';
 import { Screen } from '@/src/components/Screen';
 import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
+import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 export default function CatalogScreen() {
+  const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);
   const [movies, setMovies] = useState<MovieSummary[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -67,6 +69,7 @@ export default function CatalogScreen() {
           loading={loading}
           loadingMore={loadingMore}
           refreshing={refreshing}
+          getWatchProgress={getWatchProgress}
           onRefresh={() => {
             setRefreshing(true);
             void load(1, 'replace').finally(() => setRefreshing(false));
