@@ -3,7 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,10 +15,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
-import { fetchMovieDetail } from '@/src/api/catalog';
-import type { MovieDetail, StreamPayload } from '@/src/api/types';
+import { fetchMovieDetail, fetchPlayerFileList } from '@/src/api/catalog';
+import {
+  buildPlayerUrl,
+  listEpisodes,
+  listSeasons,
+  pickEpisodeEntry,
+} from '@/src/api/parse';
+import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/api/types';
 import { DownloadSheet } from '@/src/components/DownloadSheet';
+import { useFavoritesStore } from '@/src/favorites/store';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
+import { t } from '@/src/i18n';
 import { StreamResolver } from '@/src/player/StreamResolver';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
@@ -39,6 +47,14 @@ export default function MovieDetailScreen() {
   const [stream, setStream] = useState<StreamPayload | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamLoading, setStreamLoading] = useState(false);
+  const [fileList, setFileList] = useState<PlayerFileList | null>(null);
+  const [season, setSeason] = useState(1);
+  const [episode, setEpisode] = useState(1);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const isFavorite = useFavoritesStore((s) =>
+    id ? s.items.some((item) => item.id === id) : false
+  );
+  const toggleFavorite = useFavoritesStore((s) => s.toggle);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,19 +62,35 @@ export default function MovieDetailScreen() {
     setError(null);
     setStream(null);
     setStreamError(null);
+    setFileList(null);
     void (async () => {
       try {
         const detail = await fetchMovieDetail(href || id);
-        if (!cancelled) {
-          const listPoster = paramPoster && paramPoster.length > 0 ? paramPoster : undefined;
-          setMovie({
-            ...detail,
-            posterUrl: detail.posterUrl || listPoster,
-          });
-          if (detail.playerUrl) setStreamLoading(true);
+        if (cancelled) return;
+        const listPoster = paramPoster && paramPoster.length > 0 ? paramPoster : undefined;
+        setMovie({
+          ...detail,
+          posterUrl: detail.posterUrl || listPoster,
+        });
+        if (detail.season) setSeason(detail.season);
+        if (detail.episode) setEpisode(detail.episode);
+        if (detail.playerUrl) {
+          setStreamLoading(true);
+          const fl = await fetchPlayerFileList(detail.playerUrl);
+          if (!cancelled && fl) {
+            setFileList(fl);
+            if (fl.type === 'serial') {
+              const seasons = listSeasons(fl);
+              const s = fl.active?.seasons ?? seasons[0] ?? 1;
+              const eps = listEpisodes(fl, s);
+              const e = fl.active?.episode ?? eps[0] ?? 1;
+              setSeason(s);
+              setEpisode(e);
+            }
+          }
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+        if (!cancelled) setError(e instanceof Error ? e.message : t('common.loadingError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -67,6 +99,36 @@ export default function MovieDetailScreen() {
       cancelled = true;
     };
   }, [href, id, paramPoster]);
+
+  const isSerial = fileList?.type === 'serial';
+  const seasons = useMemo(() => (fileList ? listSeasons(fileList) : []), [fileList]);
+  const episodes = useMemo(
+    () => (fileList ? listEpisodes(fileList, season) : []),
+    [fileList, season]
+  );
+
+  const activePlayerUrl = useMemo(() => {
+    if (!movie?.playerUrl) return undefined;
+    if (!isSerial || !fileList) return movie.playerUrl;
+    const entry = pickEpisodeEntry(
+      fileList,
+      season,
+      episode,
+      movie.translationId ? Number(movie.translationId) : undefined
+    );
+    return buildPlayerUrl(movie.playerUrl, {
+      season,
+      episode,
+      translation: entry?.id_translation ?? movie.translationId,
+    });
+  }, [movie, isSerial, fileList, season, episode]);
+
+  useEffect(() => {
+    if (!activePlayerUrl) return;
+    setStream(null);
+    setStreamError(null);
+    setStreamLoading(true);
+  }, [activePlayerUrl]);
 
   const onStreamResolved = useCallback((data: StreamPayload) => {
     setStream(data);
@@ -79,6 +141,40 @@ export default function MovieDetailScreen() {
     setStreamLoading(false);
   }, []);
 
+  const displayTitle = useMemo(() => {
+    if (!movie) return paramTitle ?? t('common.movie');
+    if (isSerial) {
+      return `${movie.title} — ${t('downloads.episodeBadge', { season, episode })}`;
+    }
+    return movie.title;
+  }, [movie, isSerial, season, episode, paramTitle]);
+
+  const onToggleFavorite = useCallback(() => {
+    if (!id || favoriteBusy) return;
+    setFavoriteBusy(true);
+    const summary = {
+      id,
+      slug: movie?.slug ?? id,
+      title: movie?.title ?? paramTitle ?? t('common.movie'),
+      year: movie?.year,
+      posterUrl: movie?.posterUrl ?? (paramPoster && paramPoster.length > 0 ? paramPoster : undefined),
+      href: movie?.href ?? href ?? `/${id}.html`,
+      kpRating: movie?.kpRating,
+      imdbRating: movie?.imdbRating,
+      isSeries: movie?.isSeries ?? isSerial,
+    };
+    void toggleFavorite(summary).finally(() => setFavoriteBusy(false));
+  }, [
+    id,
+    favoriteBusy,
+    movie,
+    paramTitle,
+    paramPoster,
+    href,
+    isSerial,
+    toggleFavorite,
+  ]);
+
   const posterWidth = isTablet ? Math.min(280, width * 0.28) : Math.min(160, width * 0.38);
   const posterHeight = posterWidth * 1.48;
   const trailerId = movie?.trailerYoutubeId;
@@ -88,14 +184,36 @@ export default function MovieDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: movie?.title ?? paramTitle ?? 'Фильм' }} />
+      <Stack.Screen
+        options={{
+          title: movie?.title ?? paramTitle ?? t('common.movie'),
+          headerRight: () => (
+            <Pressable
+              onPress={onToggleFavorite}
+              disabled={!id || favoriteBusy}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isFavorite ? t('movie.removeFavorite') : t('movie.addFavorite')
+              }
+              style={({ pressed }) => [{ opacity: pressed || favoriteBusy ? 0.6 : 1, marginRight: 4 }]}
+            >
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={24}
+                color={isFavorite ? colors.accent : colors.text}
+              />
+            </Pressable>
+          ),
+        }}
+      />
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} size="large" />
         </View>
       ) : error || !movie ? (
         <View style={styles.center}>
-          <Text style={styles.error}>{error ?? 'Фильм не найден'}</Text>
+          <Text style={styles.error}>{error ?? t('movie.notFound')}</Text>
         </View>
       ) : (
         <View style={styles.root}>
@@ -116,6 +234,11 @@ export default function MovieDetailScreen() {
               </View>
               <View style={styles.heroMeta}>
                 <Text style={styles.title}>{movie.title}</Text>
+                {isSerial ? (
+                  <View style={styles.serialBadge}>
+                    <Text style={styles.serialBadgeText}>{t('movie.serial')}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.ratings}>
                   {movie.kpRating ? (
                     <View style={[styles.rating, { backgroundColor: colors.kp }]}>
@@ -136,43 +259,90 @@ export default function MovieDetailScreen() {
                   </Text>
                 ) : null}
                 {movie.director ? (
-                  <Text style={styles.metaLine}>Режиссёр: {movie.director}</Text>
+                  <Text style={styles.metaLine}>{t('movie.director', { name: movie.director })}</Text>
                 ) : null}
                 {movie.genres.length ? (
-                  <Text style={styles.metaLine}>Жанр: {movie.genres.join(', ')}</Text>
+                  <Text style={styles.metaLine}>
+                    {t('movie.genre', { list: movie.genres.join(', ') })}
+                  </Text>
                 ) : null}
               </View>
             </View>
 
+            {isSerial && fileList ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.seasons')}</Text>
+                <View style={styles.chips}>
+                  {seasons.map((s) => {
+                    const active = s === season;
+                    return (
+                      <Pressable
+                        key={s}
+                        onPress={() => {
+                          setSeason(s);
+                          const eps = listEpisodes(fileList, s);
+                          setEpisode(eps[0] ?? 1);
+                        }}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {t('movie.season', { n: s })}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.sectionTitle, { marginTop: spacing.md }]}>
+                  {t('movie.episodes')}
+                </Text>
+                <View style={styles.chips}>
+                  {episodes.map((e) => {
+                    const active = e === episode;
+                    return (
+                      <Pressable
+                        key={e}
+                        onPress={() => setEpisode(e)}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {t('movie.episode', { n: e })}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {movie.description ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Описание</Text>
+                <Text style={styles.sectionTitle}>{t('movie.description')}</Text>
                 <Text style={styles.body}>{movie.description}</Text>
               </View>
             ) : null}
 
             {movie.actors.length ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>В ролях</Text>
+                <Text style={styles.sectionTitle}>{t('movie.cast')}</Text>
                 <Text style={styles.body}>{movie.actors.join(', ')}</Text>
               </View>
             ) : null}
 
-            {movie.playerUrl ? (
+            {activePlayerUrl ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Озвучка и субтитры</Text>
+                <Text style={styles.sectionTitle}>{t('movie.audioSubs')}</Text>
                 {streamLoading && !stream ? (
                   <View style={styles.tracksLoading}>
                     <ActivityIndicator color={colors.accent} />
-                    <Text style={styles.tracksHint}>Загружаем дорожки…</Text>
+                    <Text style={styles.tracksHint}>{t('movie.loadingTracks')}</Text>
                   </View>
                 ) : null}
                 {streamError && !stream ? (
-                  <Text style={styles.tracksHint}>Не удалось загрузить список дорожек</Text>
+                  <Text style={styles.tracksHint}>{t('movie.tracksFailed')}</Text>
                 ) : null}
                 {stream?.hlsSource?.length ? (
                   <>
-                    <Text style={styles.chipLabel}>Озвучка</Text>
+                    <Text style={styles.chipLabel}>{t('movie.audio')}</Text>
                     <View style={styles.chips}>
                       {stream.hlsSource.map((source, index) => (
                         <View key={`${source.label}-${index}`} style={styles.chip}>
@@ -186,7 +356,9 @@ export default function MovieDetailScreen() {
                 ) : null}
                 {stream?.tracks?.length ? (
                   <>
-                    <Text style={[styles.chipLabel, { marginTop: spacing.md }]}>Субтитры</Text>
+                    <Text style={[styles.chipLabel, { marginTop: spacing.md }]}>
+                      {t('movie.subtitles')}
+                    </Text>
                     <View style={styles.chips}>
                       {stream.tracks.map((track, index) => (
                         <View key={`${track.label}-${index}`} style={styles.chip}>
@@ -201,7 +373,8 @@ export default function MovieDetailScreen() {
                 {streamLoading && !stream ? (
                   <View style={styles.hiddenResolver} pointerEvents="none">
                     <StreamResolver
-                      playerUrl={movie.playerUrl}
+                      key={activePlayerUrl}
+                      playerUrl={activePlayerUrl}
                       onResolved={onStreamResolved}
                       onError={onStreamFailed}
                     />
@@ -212,18 +385,20 @@ export default function MovieDetailScreen() {
 
             {trailerId || trailerEmbed ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Трейлер</Text>
+                <Text style={styles.sectionTitle}>{t('movie.trailer')}</Text>
                 {trailerId ? (
                   <Pressable
                     style={styles.trailerCard}
                     onPress={() =>
-                      void WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${trailerId}`)
+                      void WebBrowser.openBrowserAsync(
+                        `https://www.youtube.com/watch?v=${trailerId}`
+                      )
                     }
                   >
                     <View style={styles.trailerPlay}>
                       <Ionicons name="logo-youtube" size={36} color={colors.accent} />
                     </View>
-                    <Text style={styles.trailerOpenText}>Смотреть трейлер на YouTube</Text>
+                    <Text style={styles.trailerOpenText}>{t('movie.watchTrailer')}</Text>
                   </Pressable>
                 ) : trailerEmbed ? (
                   <View style={styles.trailerWrap}>
@@ -243,7 +418,7 @@ export default function MovieDetailScreen() {
 
             {!movie.playerUrl ? (
               <Text style={[styles.error, { paddingHorizontal: spacing.lg }]}>
-                Плеер для этого фильма не найден
+                {t('movie.noPlayer')}
               </Text>
             ) : null}
           </ScrollView>
@@ -253,40 +428,44 @@ export default function MovieDetailScreen() {
             style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}
           >
             <Pressable
-              style={[styles.btn, styles.btnPrimary, !movie.playerUrl && styles.btnDisabled]}
-              disabled={!movie.playerUrl}
+              style={[styles.btn, styles.btnPrimary, !activePlayerUrl && styles.btnDisabled]}
+              disabled={!activePlayerUrl}
               onPress={() =>
                 router.push({
                   pathname: '/player/[id]',
                   params: {
                     id: movie.id,
-                    playerUrl: movie.playerUrl!,
-                    title: movie.title,
+                    playerUrl: activePlayerUrl!,
+                    title: displayTitle,
                   },
                 })
               }
             >
               <Ionicons name="play" size={20} color={colors.black} />
-              <Text style={styles.btnPrimaryText}>Смотреть</Text>
+              <Text style={styles.btnPrimaryText}>{t('common.watch')}</Text>
             </Pressable>
             <Pressable
-              style={[styles.btn, styles.btnSecondary, !movie.playerUrl && styles.btnDisabled]}
-              disabled={!movie.playerUrl}
+              style={[styles.btn, styles.btnSecondary, !activePlayerUrl && styles.btnDisabled]}
+              disabled={!activePlayerUrl}
               onPress={() => setDownloadOpen(true)}
             >
               <Ionicons name="download-outline" size={20} color={colors.accent} />
-              <Text style={styles.btnSecondaryText}>Скачать</Text>
+              <Text style={styles.btnSecondaryText}>{t('common.download')}</Text>
             </Pressable>
           </LinearGradient>
 
-          {downloadOpen && movie.playerUrl ? (
+          {downloadOpen && activePlayerUrl ? (
             <DownloadSheet
               visible={downloadOpen}
               onClose={() => setDownloadOpen(false)}
-              movieId={movie.id}
-              title={movie.title}
+              movieId={
+                isSerial ? `${movie.id}_s${season}_e${episode}` : movie.id
+              }
+              title={displayTitle}
               posterUrl={movie.posterUrl}
-              playerUrl={movie.playerUrl}
+              playerUrl={activePlayerUrl}
+              season={isSerial ? season : undefined}
+              episode={isSerial ? episode : undefined}
             />
           ) : null}
         </View>
@@ -339,6 +518,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 22,
     lineHeight: 28,
+  },
+  serialBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  serialBadgeText: {
+    color: colors.accent,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
   },
   ratings: {
     flexDirection: 'row',
@@ -408,10 +599,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     maxWidth: '100%',
   },
+  chipActive: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
   chipText: {
     color: colors.textSecondary,
     fontFamily: fonts.medium,
     fontSize: 12,
+  },
+  chipTextActive: {
+    color: colors.accent,
   },
   hiddenResolver: {
     position: 'absolute',

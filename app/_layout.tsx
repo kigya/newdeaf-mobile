@@ -15,6 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useDownloadsStore } from '@/src/downloads/store';
+import { useFavoritesStore } from '@/src/favorites/store';
+import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -26,7 +28,8 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const hydrate = useDownloadsStore((s) => s.hydrate);
+  const hydrateDownloads = useDownloadsStore((s) => s.hydrate);
+  const hydrateFavorites = useFavoritesStore((s) => s.hydrate);
   const [loaded, error] = useFonts({
     Montserrat_400Regular,
     Montserrat_500Medium,
@@ -40,13 +43,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded) {
-      void hydrate();
+      void hydrateDownloads();
+      void hydrateFavorites();
       SplashScreen.hideAsync();
       if (Platform.OS === 'android') {
         void Notifications.requestPermissionsAsync();
       }
     }
-  }, [loaded, hydrate]);
+  }, [loaded, hydrateDownloads, hydrateFavorites]);
 
   if (!loaded) return null;
 
@@ -66,14 +70,14 @@ export default function RootLayout() {
         <Stack.Screen
           name="movie/[id]"
           options={{
-            title: 'Фильм',
-            headerBackTitle: 'Назад',
+            title: t('common.movie'),
+            headerBackTitle: t('common.back'),
           }}
         />
         <Stack.Screen
           name="player/[id]"
           options={{
-            title: 'Плеер',
+            title: t('common.player'),
             headerShown: false,
             presentation: 'fullScreenModal',
             animation: 'fade',
@@ -82,7 +86,7 @@ export default function RootLayout() {
         <Stack.Screen
           name="offline/[downloadId]"
           options={{
-            title: 'Офлайн',
+            title: t('common.offline'),
             headerShown: false,
             presentation: 'fullScreenModal',
             animation: 'fade',
@@ -91,8 +95,8 @@ export default function RootLayout() {
         <Stack.Screen
           name="genre/[slug]"
           options={{
-            title: 'Жанр',
-            headerBackTitle: 'Назад',
+            title: t('common.genre'),
+            headerBackTitle: t('common.back'),
           }}
         />
       </Stack>

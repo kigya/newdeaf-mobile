@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { t } from '@/src/i18n';
 import { colors, fonts } from '@/src/theme';
 
 /** Icon + label area above the system gesture/nav inset. */
@@ -9,7 +10,6 @@ const TAB_BAR_CONTENT_HEIGHT = 52;
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  // Extra gap so labels clear the gesture pill / mandatory system gestures.
   const bottomInset = Math.max(insets.bottom, 16) + 24;
 
   return (
@@ -35,7 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Каталог',
+          title: t('tabs.catalog'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="film-outline" size={size} color={color} />
           ),
@@ -44,7 +44,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Поиск',
+          title: t('tabs.search'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="search-outline" size={size} color={color} />
           ),
@@ -53,16 +53,25 @@ export default function TabLayout() {
       <Tabs.Screen
         name="genres"
         options={{
-          title: 'Жанры',
+          title: t('tabs.genres'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="grid-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
+        name="favorites"
+        options={{
+          title: t('tabs.favorites'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="heart-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="downloads"
         options={{
-          title: 'Загрузки',
+          title: t('tabs.downloads'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="download-outline" size={size} color={color} />
           ),
