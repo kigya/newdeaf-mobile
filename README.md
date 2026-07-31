@@ -2,6 +2,8 @@
 
 Android app for browsing and downloading movies from [newdeaf.top](https://newdeaf.top/) — catalog, search, genres, the site’s online player, and an offline library.
 
+Agent and product docs: [`AGENTS.md`](AGENTS.md), [`prd/`](prd/).
+
 ## Stack
 
 - Expo (React Native) + TypeScript
