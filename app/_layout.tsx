@@ -18,6 +18,7 @@ import { useDownloadsStore } from '@/src/downloads/store';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
+import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -30,6 +31,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const hydrateDownloads = useDownloadsStore((s) => s.hydrate);
   const hydrateFavorites = useFavoritesStore((s) => s.hydrate);
+  const hydrateWatchProgress = useWatchProgressStore((s) => s.hydrate);
   const [loaded, error] = useFonts({
     Montserrat_400Regular,
     Montserrat_500Medium,
@@ -45,12 +47,13 @@ export default function RootLayout() {
     if (loaded) {
       void hydrateDownloads();
       void hydrateFavorites();
+      void hydrateWatchProgress();
       SplashScreen.hideAsync();
       if (Platform.OS === 'android') {
         void Notifications.requestPermissionsAsync();
       }
     }
-  }, [loaded, hydrateDownloads, hydrateFavorites]);
+  }, [loaded, hydrateDownloads, hydrateFavorites, hydrateWatchProgress]);
 
   if (!loaded) return null;
 

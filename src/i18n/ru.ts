@@ -146,6 +146,14 @@ export const ru = {
   offline: {
     fileNotFound: 'Файл не найден',
   },
+  resume: {
+    title: 'Продолжить просмотр?',
+    message: 'Продолжить с %{label}?',
+    messageMovie: 'Продолжить с %{time}?',
+    continue: 'Продолжить',
+    startOver: 'Сначала',
+    episodeTime: 'S%{season}E%{episode} · %{time}',
+  },
   grid: {
     emptyTitle: 'Ничего не найдено',
     emptySubtitle: 'Попробуйте другой запрос или жанр',

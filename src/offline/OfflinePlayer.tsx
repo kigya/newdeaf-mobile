@@ -1,7 +1,7 @@
 import { useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,11 +11,21 @@ import { colors, fonts, spacing } from '@/src/theme';
 
 import { cueAtTime, parseVtt, type VttCue } from './vtt';
 
+const PROGRESS_THROTTLE_MS = 5000;
+
+export type OfflineProgressPayload = {
+  positionSec: number;
+  durationSec?: number;
+};
+
 type Props = {
   playlistPath: string;
   subtitlePath?: string;
   title?: string;
   mediaKind?: 'hls' | 'progressive';
+  /** Seek here after player is ready (only when user chose Continue). */
+  initialPositionSec?: number;
+  onProgress?: (payload: OfflineProgressPayload) => void;
   onClose?: () => void;
 };
 
@@ -24,6 +34,8 @@ export function OfflinePlayer({
   subtitlePath,
   title,
   mediaKind = 'hls',
+  initialPositionSec = 0,
+  onProgress,
   onClose,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -31,6 +43,10 @@ export function OfflinePlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [subsEnabled, setSubsEnabled] = useState(true);
   const showSubsToggle = mediaKind === 'hls' && !!subtitlePath;
+  const seekDoneRef = useRef(false);
+  const lastProgressAtRef = useRef(0);
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
 
   const player = useVideoPlayer(
     {
@@ -44,21 +60,92 @@ export function OfflinePlayer({
     }
   );
 
-  useEventListener(player, 'timeUpdate', ({ currentTime: t }) => {
-    setCurrentTime(t);
+  const reportProgress = (positionSec: number, force = false) => {
+    const cb = onProgressRef.current;
+    if (!cb) return;
+    const now = Date.now();
+    if (!force && now - lastProgressAtRef.current < PROGRESS_THROTTLE_MS) return;
+    lastProgressAtRef.current = now;
+    let durationSec: number | undefined;
+    try {
+      const d = player.duration;
+      if (typeof d === 'number' && d > 0 && !Number.isNaN(d)) durationSec = d;
+    } catch {
+      // ignore
+    }
+    cb({ positionSec, durationSec });
+  };
+
+  useEventListener(player, 'timeUpdate', ({ currentTime: time }) => {
+    setCurrentTime(time);
+    reportProgress(time);
   });
 
   // Fallback: some Android builds don't emit timeUpdate reliably with local HLS.
   useEffect(() => {
     const id = setInterval(() => {
       try {
-        const t = player.currentTime;
-        if (typeof t === 'number' && !Number.isNaN(t)) setCurrentTime(t);
+        const time = player.currentTime;
+        if (typeof time === 'number' && !Number.isNaN(time)) {
+          setCurrentTime(time);
+          reportProgress(time);
+        }
       } catch {
         // ignore
       }
     }, 250);
     return () => clearInterval(id);
+  }, [player]);
+
+  // Seek to resume position once duration/currentTime are available.
+  useEffect(() => {
+    if (seekDoneRef.current) return;
+    if (!(initialPositionSec > 0)) {
+      seekDoneRef.current = true;
+      return;
+    }
+    const id = setInterval(() => {
+      try {
+        const duration = player.duration;
+        if (typeof duration === 'number' && duration > 0) {
+          const target = Math.min(initialPositionSec, Math.max(0, duration - 1));
+          player.currentTime = target;
+          seekDoneRef.current = true;
+          clearInterval(id);
+        }
+      } catch {
+        // keep trying briefly
+      }
+    }, 200);
+    const timeout = setTimeout(() => {
+      clearInterval(id);
+      if (!seekDoneRef.current) {
+        try {
+          player.currentTime = initialPositionSec;
+        } catch {
+          // ignore
+        }
+        seekDoneRef.current = true;
+      }
+    }, 8000);
+    return () => {
+      clearInterval(id);
+      clearTimeout(timeout);
+    };
+  }, [player, initialPositionSec]);
+
+  // Flush progress on unmount / close.
+  useEffect(() => {
+    return () => {
+      try {
+        const time = player.currentTime;
+        if (typeof time === 'number' && !Number.isNaN(time)) {
+          reportProgress(time, true);
+        }
+      } catch {
+        // ignore
+      }
+    };
   }, [player]);
 
   useEffect(() => {
@@ -85,6 +172,18 @@ export function OfflinePlayer({
     [cues, currentTime, subsEnabled]
   );
 
+  const handleClose = () => {
+    try {
+      const time = player.currentTime;
+      if (typeof time === 'number' && !Number.isNaN(time)) {
+        reportProgress(time, true);
+      }
+    } catch {
+      // ignore
+    }
+    onClose?.();
+  };
+
   return (
     <View style={styles.wrap}>
       <VideoView
@@ -105,7 +204,7 @@ export function OfflinePlayer({
       ) : null}
 
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={onClose} hitSlop={12} style={styles.iconBtn}>
+        <Pressable onPress={handleClose} hitSlop={12} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.white} />
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>

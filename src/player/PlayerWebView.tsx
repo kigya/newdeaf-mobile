@@ -9,6 +9,11 @@ import { colors } from '@/src/theme';
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
+export type PlayerProgressPayload = {
+  currentTime: number;
+  duration?: number;
+};
+
 type Props = {
   playerUrl: string;
   mode?: 'watch' | 'resolve';
@@ -16,6 +21,8 @@ type Props = {
   onError?: (message: string) => void;
   onReady?: () => void;
   onStatus?: (message: string) => void;
+  /** Best-effort playback progress from Android iframe hook. */
+  onProgress?: (payload: PlayerProgressPayload) => void;
 };
 
 export function PlayerWebView({
@@ -25,6 +32,7 @@ export function PlayerWebView({
   onError,
   onReady,
   onStatus,
+  onProgress,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const resolvedRef = useRef(false);
@@ -65,9 +73,22 @@ export function PlayerWebView({
           message?: string;
           url?: string;
           keys?: string[];
+          currentTime?: number;
+          duration?: number | null;
         };
         if (msg.type === 'ready') {
           onReady?.();
+          return;
+        }
+        if (msg.type === 'progress') {
+          const currentTime = Number(msg.currentTime);
+          if (Number.isFinite(currentTime) && currentTime > 0) {
+            const duration =
+              msg.duration != null && Number.isFinite(Number(msg.duration))
+                ? Number(msg.duration)
+                : undefined;
+            onProgress?.({ currentTime, duration });
+          }
           return;
         }
         if (msg.type === 'debug') {
@@ -97,7 +118,7 @@ export function PlayerWebView({
         // ignore non-json
       }
     },
-    [onError, onReady, onStatus, onStream]
+    [onError, onProgress, onReady, onStatus, onStream]
   );
 
   if (mode === 'resolve') {
@@ -140,6 +161,7 @@ export function PlayerWebView({
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
         setSupportMultipleWindows={false}
+        onMessage={onMessage}
         onLoadEnd={() => setLoading(false)}
         style={styles.web}
         userAgent={USER_AGENT}

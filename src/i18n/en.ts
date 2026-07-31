@@ -148,6 +148,14 @@ export const en: TranslationKeys = {
   offline: {
     fileNotFound: 'File not found',
   },
+  resume: {
+    title: 'Continue watching?',
+    message: 'Resume from %{label}?',
+    messageMovie: 'Resume from %{time}?',
+    continue: 'Continue',
+    startOver: 'Start over',
+    episodeTime: 'S%{season}E%{episode} · %{time}',
+  },
   grid: {
     emptyTitle: 'Nothing found',
     emptySubtitle: 'Try another query or genre',

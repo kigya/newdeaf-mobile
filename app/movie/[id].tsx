@@ -23,12 +23,20 @@ import {
   pickEpisodeEntry,
 } from '@/src/api/parse';
 import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/api/types';
+import { ConfirmDialog } from '@/src/components/ConfirmDialog';
 import { DownloadSheet } from '@/src/components/DownloadSheet';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
 import { t } from '@/src/i18n';
 import { StreamResolver } from '@/src/player/StreamResolver';
 import { colors, fonts, radius, spacing } from '@/src/theme';
+import { resumeDialogMessage } from '@/src/watch-progress/format';
+import {
+  fetchLatestProgressForMovie,
+  fetchProgress,
+  useWatchProgressStore,
+} from '@/src/watch-progress/store';
+import { isResumable, type WatchProgressRecord } from '@/src/watch-progress/types';
 
 export default function MovieDetailScreen() {
   const { id, href, title: paramTitle, posterUrl: paramPoster } = useLocalSearchParams<{
@@ -51,10 +59,12 @@ export default function MovieDetailScreen() {
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [resumePrompt, setResumePrompt] = useState<WatchProgressRecord | null>(null);
   const isFavorite = useFavoritesStore((s) =>
     id ? s.items.some((item) => item.id === id) : false
   );
   const toggleFavorite = useFavoritesStore((s) => s.toggle);
+  const clearProgress = useWatchProgressStore((s) => s.clear);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +73,7 @@ export default function MovieDetailScreen() {
     setStream(null);
     setStreamError(null);
     setFileList(null);
+    setResumePrompt(null);
     void (async () => {
       try {
         const detail = await fetchMovieDetail(href || id);
@@ -81,11 +92,22 @@ export default function MovieDetailScreen() {
             setFileList(fl);
             if (fl.type === 'serial') {
               const seasons = listSeasons(fl);
-              const s = fl.active?.seasons ?? seasons[0] ?? 1;
-              const eps = listEpisodes(fl, s);
-              const e = fl.active?.episode ?? eps[0] ?? 1;
-              setSeason(s);
-              setEpisode(e);
+              const latest = await fetchLatestProgressForMovie(detail.id);
+              if (
+                latest?.season != null &&
+                latest.episode != null &&
+                seasons.includes(latest.season) &&
+                listEpisodes(fl, latest.season).includes(latest.episode)
+              ) {
+                setSeason(latest.season);
+                setEpisode(latest.episode);
+              } else {
+                const s = fl.active?.seasons ?? seasons[0] ?? 1;
+                const eps = listEpisodes(fl, s);
+                const e = fl.active?.episode ?? eps[0] ?? 1;
+                setSeason(s);
+                setEpisode(e);
+              }
             }
           }
         }
@@ -107,6 +129,14 @@ export default function MovieDetailScreen() {
     [fileList, season]
   );
 
+  const displayTitle = useMemo(() => {
+    if (!movie) return paramTitle ?? t('common.movie');
+    if (isSerial) {
+      return `${movie.title} — ${t('downloads.episodeBadge', { season, episode })}`;
+    }
+    return movie.title;
+  }, [movie, isSerial, season, episode, paramTitle]);
+
   const activePlayerUrl = useMemo(() => {
     if (!movie?.playerUrl) return undefined;
     if (!isSerial || !fileList) return movie.playerUrl;
@@ -122,6 +152,70 @@ export default function MovieDetailScreen() {
       translation: entry?.id_translation ?? movie.translationId,
     });
   }, [movie, isSerial, fileList, season, episode]);
+
+  const openPlayer = useCallback(
+    async (opts: { resume: boolean; progress?: WatchProgressRecord | null }) => {
+      if (!movie || !activePlayerUrl) return;
+      const progress = opts.progress;
+      const time =
+        opts.resume && progress && progress.positionSec > 0
+          ? Math.floor(progress.positionSec)
+          : 0;
+
+      if (!opts.resume) {
+        await clearProgress(
+          movie.id,
+          isSerial ? season : undefined,
+          isSerial ? episode : undefined
+        );
+      }
+
+      const playerUrl =
+        time > 0
+          ? buildPlayerUrl(activePlayerUrl, { time })
+          : activePlayerUrl;
+
+      router.push({
+        pathname: '/player/[id]',
+        params: {
+          id: movie.id,
+          playerUrl,
+          title: displayTitle,
+          movieId: movie.id,
+          posterUrl: movie.posterUrl ?? '',
+          href: movie.href ?? '',
+          isSeries: isSerial ? '1' : '0',
+          season: isSerial ? String(season) : '',
+          episode: isSerial ? String(episode) : '',
+          startTime: String(time),
+        },
+      });
+    },
+    [
+      activePlayerUrl,
+      clearProgress,
+      displayTitle,
+      episode,
+      isSerial,
+      movie,
+      router,
+      season,
+    ]
+  );
+
+  const onWatchPress = useCallback(async () => {
+    if (!movie || !activePlayerUrl) return;
+    const progress = await fetchProgress(
+      movie.id,
+      isSerial ? season : undefined,
+      isSerial ? episode : undefined
+    );
+    if (isResumable(progress)) {
+      setResumePrompt(progress);
+      return;
+    }
+    await openPlayer({ resume: false, progress });
+  }, [activePlayerUrl, episode, isSerial, movie, openPlayer, season]);
 
   useEffect(() => {
     if (!activePlayerUrl) return;
@@ -140,14 +234,6 @@ export default function MovieDetailScreen() {
     setStreamError(message);
     setStreamLoading(false);
   }, []);
-
-  const displayTitle = useMemo(() => {
-    if (!movie) return paramTitle ?? t('common.movie');
-    if (isSerial) {
-      return `${movie.title} — ${t('downloads.episodeBadge', { season, episode })}`;
-    }
-    return movie.title;
-  }, [movie, isSerial, season, episode, paramTitle]);
 
   const onToggleFavorite = useCallback(() => {
     if (!id || favoriteBusy) return;
@@ -430,16 +516,7 @@ export default function MovieDetailScreen() {
             <Pressable
               style={[styles.btn, styles.btnPrimary, !activePlayerUrl && styles.btnDisabled]}
               disabled={!activePlayerUrl}
-              onPress={() =>
-                router.push({
-                  pathname: '/player/[id]',
-                  params: {
-                    id: movie.id,
-                    playerUrl: activePlayerUrl!,
-                    title: displayTitle,
-                  },
-                })
-              }
+              onPress={() => void onWatchPress()}
             >
               <Ionicons name="play" size={20} color={colors.black} />
               <Text style={styles.btnPrimaryText}>{t('common.watch')}</Text>
@@ -468,6 +545,24 @@ export default function MovieDetailScreen() {
               episode={isSerial ? episode : undefined}
             />
           ) : null}
+
+          <ConfirmDialog
+            visible={!!resumePrompt}
+            title={t('resume.title')}
+            message={resumePrompt ? resumeDialogMessage(resumePrompt) : undefined}
+            confirmLabel={t('resume.continue')}
+            cancelLabel={t('resume.startOver')}
+            onConfirm={() => {
+              const progress = resumePrompt;
+              setResumePrompt(null);
+              void openPlayer({ resume: true, progress });
+            }}
+            onCancel={() => {
+              const progress = resumePrompt;
+              setResumePrompt(null);
+              void openPlayer({ resume: false, progress });
+            }}
+          />
         </View>
       )}
     </>

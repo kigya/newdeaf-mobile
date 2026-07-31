@@ -56967,7 +56967,7 @@ new file mode 100644
 index 0000000..2761593
 --- /dev/null
 +++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/NdStreamHookInterceptor.java
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,100 @@
 +package com.reactnativecommunity.webview;
 +
 +import android.util.Log;
@@ -57030,6 +57030,27 @@ index 0000000..2761593
 +      + "}).catch(function(){})}}"
 +      + "catch(e){}return res})} }"
 +      + "}catch(e){}"
++      + "function findVideo(root){"
++      + "try{"
++      + "var v=root.querySelector&&root.querySelector('video');"
++      + "if(v)return v;"
++      + "var all=root.querySelectorAll?root.querySelectorAll('*'):[];"
++      + "for(var i=0;i<all.length;i++){"
++      + "if(all[i].shadowRoot){var sv=findVideo(all[i].shadowRoot);if(sv)return sv;}"
++      + "}"
++      + "}catch(e){}"
++      + "return null;"
++      + "}"
++      + "setInterval(function(){"
++      + "try{"
++      + "var video=findVideo(document);"
++      + "if(!video)return;"
++      + "var ct=Number(video.currentTime)||0;"
++      + "var dur=Number(video.duration);"
++      + "if(!(ct>0))return;"
++      + "post({type:'progress',currentTime:ct,duration:isFinite(dur)&&dur>0?dur:null});"
++      + "}catch(e){}"
++      + "},5000);"
 +      + "post({type:'debug',message:'hook_ready',url:String(window!==window.top)});"
 +      + "})();";
 +

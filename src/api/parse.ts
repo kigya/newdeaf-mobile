@@ -394,13 +394,16 @@ export function parsePlayerFileList(html: string): PlayerFileList | null {
 
 export function buildPlayerUrl(
   basePlayerUrl: string,
-  opts: { season?: number; episode?: number; translation?: number | string }
+  opts: { season?: number; episode?: number; translation?: number | string; time?: number }
 ): string {
   try {
     const u = new URL(basePlayerUrl);
     if (opts.season != null) u.searchParams.set('season', String(opts.season));
     if (opts.episode != null) u.searchParams.set('episode', String(opts.episode));
     if (opts.translation != null) u.searchParams.set('translation', String(opts.translation));
+    if (opts.time != null && opts.time > 0) {
+      u.searchParams.set('time', String(Math.floor(opts.time)));
+    }
     return u.toString();
   } catch {
     return basePlayerUrl;
