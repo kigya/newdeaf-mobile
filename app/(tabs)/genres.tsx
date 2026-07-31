@@ -5,6 +5,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getGenres } from '@/src/api/catalog';
 import { Screen } from '@/src/components/Screen';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
+import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 export default function GenresScreen() {
@@ -17,7 +18,7 @@ export default function GenresScreen() {
   const itemWidth = (width - pad * 2 - gap * (colCount - 1)) / colCount;
 
   return (
-    <Screen title="Жанры" subtitle="Фильтр по категориям">
+    <Screen title={t('genres.title')} subtitle={t('genres.subtitle')}>
       <FlatList
         data={genres}
         key={colCount}

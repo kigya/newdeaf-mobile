@@ -1,5 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { t } from '@/src/i18n';
+
 export async function downloadProgressiveFile(
   url: string,
   destPath: string,
@@ -19,10 +21,10 @@ export async function downloadProgressiveFile(
 
   const result = await download.downloadAsync();
   if (!result) {
-    throw new Error('Не удалось скачать файл');
+    throw new Error(t('store.fileDownloadFailed'));
   }
   if (result.status && result.status >= 400) {
-    throw new Error(`Ошибка скачивания: ${result.status}`);
+    throw new Error(`${t('store.fileDownloadFailed')}: ${result.status}`);
   }
   onProgress?.(1);
   return result.uri;

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MotiView } from 'moti';
 
 import { colors, fonts, spacing, typography } from '@/src/theme';
@@ -10,20 +10,25 @@ type Props = {
 
 export function EmptyState({ title, subtitle }: Props) {
   return (
-    <MotiView
-      from={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: 'timing', duration: 350 }}
-      style={styles.wrap}
-    >
-      <View style={styles.dot} />
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-    </MotiView>
+    <Pressable style={styles.flex} onPress={Keyboard.dismiss}>
+      <MotiView
+        from={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'timing', duration: 350 }}
+        style={styles.wrap}
+      >
+        <View style={styles.dot} />
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </MotiView>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   wrap: {
     flex: 1,
     alignItems: 'center',

@@ -11,22 +11,23 @@ import { Screen } from '@/src/components/Screen';
 import { YoutubeDownloadSheet } from '@/src/components/YoutubeDownloadSheet';
 import { useDownloadsStore } from '@/src/downloads/store';
 import type { DownloadRecord } from '@/src/downloads/types';
+import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 function statusLabel(item: DownloadRecord): string {
   switch (item.status) {
     case 'queued':
-      return 'В очереди';
+      return t('downloads.queued');
     case 'resolving':
-      return 'Подготовка…';
+      return t('downloads.resolving');
     case 'downloading':
-      return `Загрузка ${Math.round(item.progress * 100)}%`;
+      return t('downloads.downloading', { pct: Math.round(item.progress * 100) });
     case 'completed':
-      return 'Готово · офлайн';
+      return t('downloads.completed');
     case 'failed':
-      return item.error ?? 'Ошибка';
+      return item.error ?? t('downloads.failed');
     case 'paused':
-      return 'Пауза';
+      return t('downloads.paused');
     default: {
       const _exhaustive: never = item.status;
       return String(_exhaustive);
@@ -47,6 +48,7 @@ function DownloadRow({
 }) {
   const isYoutube = item.source === 'youtube';
   const isDownloading = item.status === 'downloading';
+  const hasEpisode = item.season != null && item.episode != null;
 
   return (
     <Animated.View
@@ -75,7 +77,16 @@ function DownloadRow({
           {isYoutube ? (
             <View style={styles.badge}>
               <Ionicons name="logo-youtube" size={12} color={colors.accent} />
-              <Text style={styles.badgeText}>Скачанное видео</Text>
+              <Text style={styles.badgeText}>{t('downloads.ytBadge')}</Text>
+            </View>
+          ) : hasEpisode ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {t('downloads.episodeBadge', {
+                  season: item.season,
+                  episode: item.episode,
+                })}
+              </Text>
             </View>
           ) : null}
           <Text style={styles.title} numberOfLines={2}>
@@ -91,7 +102,7 @@ function DownloadRow({
                 {item.quality}p · {item.audioLabel}
               </Text>
               <Text style={styles.line} numberOfLines={1}>
-                Субтитры: {item.subtitleLabel}
+                {t('downloads.subtitlesLine', { label: item.subtitleLabel })}
               </Text>
             </>
           )}
@@ -152,22 +163,19 @@ export default function DownloadsScreen() {
   };
 
   return (
-    <Screen title="Загрузки" subtitle="Смотрите без интернета">
+    <Screen title={t('downloads.title')} subtitle={t('downloads.subtitle')}>
       <View style={styles.body}>
         <Pressable style={styles.ytButton} onPress={() => setYoutubeOpen(true)}>
           <Ionicons name="logo-youtube" size={26} color={colors.black} />
           <View style={styles.ytButtonText}>
-            <Text style={styles.ytButtonTitle}>YouTube Video Downloader</Text>
-            <Text style={styles.ytButtonSub}>Скачать видео по ссылке</Text>
+            <Text style={styles.ytButtonTitle}>{t('downloads.ytTitle')}</Text>
+            <Text style={styles.ytButtonSub}>{t('downloads.ytSub')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.black} />
         </Pressable>
 
         {!items.length ? (
-          <EmptyState
-            title="Пока пусто"
-            subtitle="Скачайте фильм с карточки или YouTube-видео по ссылке"
-          />
+          <EmptyState title={t('downloads.emptyTitle')} subtitle={t('downloads.emptySubtitle')} />
         ) : (
           <FlatList
             data={items}
@@ -184,7 +192,7 @@ export default function DownloadsScreen() {
                 }
                 onRetry={() => {
                   void retry(item.id).catch((e) =>
-                    setRetryError(e instanceof Error ? e.message : 'Не удалось повторить')
+                    setRetryError(e instanceof Error ? e.message : t('downloads.retryFailed'))
                   );
                 }}
                 onDelete={() => setPendingDelete(item)}
@@ -198,14 +206,14 @@ export default function DownloadsScreen() {
 
       <ConfirmDialog
         visible={!!pendingDelete}
-        title="Удалить загрузку?"
+        title={t('downloads.deleteTitle')}
         message={
           pendingDelete
-            ? `«${pendingDelete.title}» будет удалён с устройства вместе с файлами.`
+            ? t('downloads.deleteMessage', { title: pendingDelete.title })
             : undefined
         }
-        confirmLabel="Удалить"
-        cancelLabel="Отмена"
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
         destructive
         onConfirm={confirmRemove}
         onCancel={() => setPendingDelete(null)}
@@ -213,9 +221,9 @@ export default function DownloadsScreen() {
 
       <ConfirmDialog
         visible={!!retryError}
-        title="Не удалось повторить"
+        title={t('downloads.retryFailedTitle')}
         message={retryError ?? undefined}
-        confirmLabel="Понятно"
+        confirmLabel={t('common.gotIt')}
         confirmOnly
         onConfirm={() => setRetryError(null)}
         onCancel={() => setRetryError(null)}

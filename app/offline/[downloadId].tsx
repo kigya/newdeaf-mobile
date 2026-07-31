@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { getDownload } from '@/src/downloads/db';
 import type { DownloadRecord } from '@/src/downloads/types';
+import { t } from '@/src/i18n';
 import { OfflinePlayer } from '@/src/offline/OfflinePlayer';
 import { colors, fonts } from '@/src/theme';
 
@@ -20,11 +21,11 @@ export default function OfflinePlayerScreen() {
       try {
         const row = await getDownload(downloadId);
         if (!cancelled) {
-          if (!row?.playlistPath) setError('Файл не найден');
+          if (!row?.playlistPath) setError(t('offline.fileNotFound'));
           else setItem(row);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка');
+        if (!cancelled) setError(e instanceof Error ? e.message : t('common.error'));
       }
     })();
     return () => {

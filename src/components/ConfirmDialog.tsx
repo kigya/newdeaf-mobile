@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, fonts, radius, spacing } from '@/src/theme';
+import { t } from '@/src/i18n';
 
 type Props = {
   visible: boolean;
@@ -19,8 +20,8 @@ export function ConfirmDialog({
   visible,
   title,
   message,
-  confirmLabel = 'ОК',
-  cancelLabel = 'Отмена',
+  confirmLabel = t('common.ok'),
+  cancelLabel = t('common.cancel'),
   destructive = false,
   confirmOnly = false,
   onConfirm,

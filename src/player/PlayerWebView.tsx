@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import type { StreamPayload } from '@/src/api/types';
+import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
 
 const USER_AGENT =
@@ -72,9 +73,9 @@ export function PlayerWebView({
         if (msg.type === 'debug') {
           console.log('[PlayerWebView]', msg.message, msg.url ?? '', msg.keys ?? '');
           if (msg.message === 'hook_ready') {
-            onStatus?.('Получаем потоки…');
+            onStatus?.(t('player.resolving'));
           } else if (msg.message === 'bnsi_ok') {
-            onStatus?.('Потоки получены');
+            onStatus?.(t('player.resolved'));
           }
           return;
         }
@@ -116,7 +117,7 @@ export function PlayerWebView({
           onMessage={onMessage}
           onLoadEnd={() => {
             setLoading(false);
-            onStatus?.('Получаем потоки…');
+            onStatus?.(t('player.resolving'));
           }}
           style={styles.resolveWeb}
           userAgent={USER_AGENT}

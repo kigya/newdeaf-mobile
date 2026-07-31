@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 
 import { cueAtTime, parseVtt, type VttCue } from './vtt';
@@ -108,7 +109,7 @@ export function OfflinePlayer({
           <Ionicons name="chevron-back" size={24} color={colors.white} />
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>
-          {title ?? 'Офлайн'}
+          {title ?? t('common.offline')}
         </Text>
         {showSubsToggle ? (
           <Pressable onPress={() => setSubsEnabled((v) => !v)} hitSlop={12} style={styles.iconBtn}>

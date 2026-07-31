@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { PlayerWebView } from '@/src/player/PlayerWebView';
+import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 
 export default function OnlinePlayerScreen() {
@@ -19,7 +20,7 @@ export default function OnlinePlayerScreen() {
   if (!playerUrl) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>Нет URL плеера</Text>
+        <Text style={styles.error}>{t('movie.noPlayer')}</Text>
       </View>
     );
   }
@@ -33,7 +34,7 @@ export default function OnlinePlayerScreen() {
           <Ionicons name="close" size={24} color={colors.white} />
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>
-          {title ?? 'Плеер'}
+          {title ?? t('common.player')}
         </Text>
       </View>
     </View>

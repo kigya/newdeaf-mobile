@@ -1,11 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { searchMovies } from '@/src/api/catalog';
 import type { MovieSummary } from '@/src/api/types';
 import { MovieGrid } from '@/src/components/MovieGrid';
 import { Screen } from '@/src/components/Screen';
+import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 const MIN_QUERY_LENGTH = 4;
@@ -30,10 +38,11 @@ export default function SearchScreen() {
     const q = query.trim();
     if (q.length < MIN_QUERY_LENGTH) {
       setSearched(false);
-      setError(`Введите минимум ${MIN_QUERY_LENGTH} символа`);
+      setError(t('search.minLength', { count: MIN_QUERY_LENGTH }));
       setMovies([]);
       return;
     }
+    Keyboard.dismiss();
     setLoading(true);
     setSearched(true);
     setError(null);
@@ -41,7 +50,7 @@ export default function SearchScreen() {
       const items = await searchMovies(q);
       setMovies(items);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка поиска');
+      setError(e instanceof Error ? e.message : t('search.error'));
       setMovies([]);
     } finally {
       setLoading(false);
@@ -49,37 +58,44 @@ export default function SearchScreen() {
   };
 
   return (
-    <Screen title="Поиск" subtitle="Найдите нужный фильм">
-      <View style={styles.bar}>
+    <Screen title={t('search.title')} subtitle={t('search.subtitle')}>
+      <Pressable style={styles.bar} onPress={Keyboard.dismiss}>
         <Ionicons name="search" size={18} color={colors.textMuted} />
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Название фильма…"
+          placeholder={t('search.placeholder')}
           placeholderTextColor={colors.textMuted}
           style={styles.input}
           returnKeyType="search"
           onSubmitEditing={runSearch}
           autoCorrect={false}
+          blurOnSubmit
         />
         {loading ? (
           <ActivityIndicator color={colors.accent} />
         ) : hasQuery ? (
-          <Pressable onPress={() => setQuery('')} hitSlop={8}>
+          <Pressable
+            onPress={() => {
+              setQuery('');
+              Keyboard.dismiss();
+            }}
+            hitSlop={8}
+          >
             <Ionicons name="close-circle" size={26} color={colors.textMuted} />
           </Pressable>
         ) : null}
-      </View>
+      </Pressable>
       <MovieGrid
         movies={movies}
         loading={loading}
-        emptyTitle={searched ? 'Ничего не найдено' : 'Начните поиск'}
+        emptyTitle={searched ? t('search.emptyNone') : t('search.emptyStart')}
         emptySubtitle={
           error
             ? error
             : searched
-              ? 'Попробуйте другое название'
-              : `Введите минимум ${MIN_QUERY_LENGTH} символа`
+              ? t('search.emptyNoneSub')
+              : t('search.emptyStartSub', { count: MIN_QUERY_LENGTH })
         }
       />
     </Screen>

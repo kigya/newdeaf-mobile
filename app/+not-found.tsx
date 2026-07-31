@@ -1,16 +1,17 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Не найдено' }} />
+      <Stack.Screen options={{ title: t('notFound.title') }} />
       <View style={styles.container}>
-        <Text style={styles.title}>Этого экрана нет</Text>
+        <Text style={styles.title}>{t('notFound.body')}</Text>
         <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>На главную</Text>
+          <Text style={styles.linkText}>{t('notFound.home')}</Text>
         </Link>
       </View>
     </>

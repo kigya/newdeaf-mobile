@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import type { StreamPayload } from '@/src/api/types';
+import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 
 import { PlayerWebView } from './PlayerWebView';
@@ -14,18 +15,20 @@ type Props = {
 };
 
 export function StreamResolver({ playerUrl, onResolved, onError, timeoutMs = 70000 }: Props) {
-  const [status, setStatus] = useState('Получаем потоки…');
+  const [status, setStatus] = useState(t('player.resolving'));
   const done = useRef(false);
 
   useEffect(() => {
+    done.current = false;
+    setStatus(t('player.resolving'));
     const timer = setTimeout(() => {
       if (!done.current) {
         done.current = true;
-        onError?.('Таймаут получения потоков. Попробуйте ещё раз.');
+        onError?.(t('player.timeout'));
       }
     }, timeoutMs);
     return () => clearTimeout(timer);
-  }, [onError, timeoutMs]);
+  }, [onError, timeoutMs, playerUrl]);
 
   return (
     <View style={styles.wrap}>
@@ -33,6 +36,7 @@ export function StreamResolver({ playerUrl, onResolved, onError, timeoutMs = 700
       <Text style={styles.text}>{status}</Text>
       <View style={styles.playerSlot}>
         <PlayerWebView
+          key={playerUrl}
           playerUrl={playerUrl}
           mode="resolve"
           onReady={() => {}}
