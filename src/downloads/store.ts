@@ -1,13 +1,15 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { create } from 'zustand';
 
+import type { StreamPayload } from '@/src/api/types';
 import { deleteDownloadRow, getDownload, listDownloads, upsertDownload } from './db';
 import {
   startDownloadForeground,
   stopDownloadForeground,
   updateDownloadForeground,
 } from './foreground';
-import { downloadHlsToDirectory, downloadTextFile } from './hls';
+import { downloadHlsToDirectory, downloadTextFile, pickPrimaryMediaUrl, pickSubtitleTrack } from './hls';
+import { withMediaFetchPlayer } from './mediaFetch';
 import { downloadProgressiveFile } from './progressive';
 import type { DownloadRecord, DownloadRequest, YoutubeDownloadRequest } from './types';
 import { resolveYoutubeStream } from './youtube';
@@ -21,6 +23,9 @@ type DownloadsState = {
   enqueue: (request: DownloadRequest) => Promise<string>;
   enqueueYoutube: (youtubeUrl: string) => Promise<string>;
   retry: (id: string) => Promise<void>;
+  /** Finish movie retry after StreamResolver captured fresh HLS URLs. */
+  completeMovieRetry: (id: string, payload: StreamPayload) => Promise<void>;
+  failMovieResolve: (id: string, message: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -187,26 +192,29 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     patchItemInStore(current, id);
 
     const preferredHeight = Number(request.quality) || 720;
-    const { playlistPath } = await downloadHlsToDirectory(
-      request.hlsUrl,
-      baseDir,
-      preferredHeight,
-      (progress) => {
-        current = {
-          ...current,
-          progress: Math.min(0.92, progress * 0.92),
-          status: 'downloading',
-          updatedAt: Date.now(),
-        };
-        void reporter.report(current);
-      },
-      request.playerUrl
-    );
+    const { playlistPath, subtitlePath } = await withMediaFetchPlayer(request.playerUrl, async () => {
+      const { playlistPath: path } = await downloadHlsToDirectory(
+        request.hlsUrl,
+        baseDir,
+        preferredHeight,
+        (progress) => {
+          current = {
+            ...current,
+            progress: Math.min(0.92, progress * 0.92),
+            status: 'downloading',
+            updatedAt: Date.now(),
+          };
+          void reporter.report(current);
+        },
+        request.playerUrl
+      );
 
-    await reporter.flushPending();
+      await reporter.flushPending();
 
-    const subtitlePath = `${baseDir}subs.vtt`;
-    await downloadTextFile(request.subtitleUrl, subtitlePath, request.playerUrl);
+      const subs = `${baseDir}subs.vtt`;
+      await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
+      return { playlistPath: path, subtitlePath: subs };
+    });
 
     current = {
       ...current,
@@ -473,33 +481,113 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       return;
     }
 
-    if (!item.hlsUrl || !item.subtitleUrl || !item.playerUrl) {
+    if (!item.playerUrl) {
       throw new Error(t('store.noRetryParams'));
     }
-    const request: DownloadRequest = {
-      movieId: item.movieId,
-      title: item.title,
-      posterUrl: item.posterUrl,
-      playerUrl: item.playerUrl,
-      audioLabel: item.audioLabel,
-      quality: item.quality,
-      subtitleLabel: item.subtitleLabel,
-      hlsUrl: item.hlsUrl,
-      subtitleUrl: item.subtitleUrl,
-      season: item.season,
-      episode: item.episode,
-    };
+    // Bust player HTTP cache so bnsi returns fresh signed HLS URLs.
+    const bust = `_nd=${Date.now()}`;
+    const playerUrl = item.playerUrl.includes('?')
+      ? `${item.playerUrl}&${bust}`
+      : `${item.playerUrl}?${bust}`;
+    // CDN signed HLS URLs expire — re-resolve via StreamResolver before download.
     const updated: DownloadRecord = {
       ...item,
-      status: 'queued',
+      playerUrl,
+      status: 'resolving',
       error: undefined,
+      progress: 0,
       updatedAt: Date.now(),
       source: 'movie',
       mediaKind: 'hls',
     };
     await persist(updated);
     patchItemInStore(updated, id);
-    void runDownloadJob(id, request, item.videoDir ?? downloadDirForId(id));
+  },
+
+  completeMovieRetry: async (id, payload) => {
+    const item = await getDownload(id);
+    if (!item || !item.playerUrl) {
+      throw new Error(t('store.notFound'));
+    }
+
+    const sources = payload.hlsSource ?? [];
+    if (!sources.length) {
+      throw new Error(t('store.retryNoStreams'));
+    }
+
+    const norm = (s: string) => s.trim().toLowerCase();
+    const audio =
+      sources.find((s) => norm(s.label) === norm(item.audioLabel)) ?? sources[0];
+    const hlsUrl =
+      audio.quality[item.quality] ??
+      audio.quality[Object.keys(audio.quality)[0]];
+    if (!hlsUrl) {
+      throw new Error(t('store.retryNoStreams'));
+    }
+
+    const tracks = payload.tracks ?? [];
+    const subtitle =
+      tracks.find((tr) => norm(tr.label) === norm(item.subtitleLabel)) ??
+      pickSubtitleTrack(tracks);
+    if (!subtitle?.src) {
+      throw new Error(t('store.retryNoStreams'));
+    }
+
+    const request: DownloadRequest = {
+      movieId: item.movieId,
+      title: item.title,
+      posterUrl: item.posterUrl,
+      playerUrl: item.playerUrl,
+      audioLabel: audio.label,
+      quality: item.quality in audio.quality ? item.quality : Object.keys(audio.quality)[0],
+      subtitleLabel: subtitle.label,
+      hlsUrl: pickPrimaryMediaUrl(hlsUrl),
+      subtitleUrl: subtitle.src,
+      season: item.season,
+      episode: item.episode,
+    };
+
+    const baseDir = item.videoDir ?? downloadDirForId(id);
+    // Fresh signed URLs — drop partial segments from the previous attempt.
+    try {
+      await FileSystem.deleteAsync(baseDir, { idempotent: true });
+    } catch {
+      // ignore
+    }
+
+    const updated: DownloadRecord = {
+      ...item,
+      audioLabel: request.audioLabel,
+      quality: request.quality,
+      subtitleLabel: request.subtitleLabel,
+      hlsUrl: request.hlsUrl,
+      subtitleUrl: request.subtitleUrl,
+      status: 'queued',
+      progress: 0,
+      error: undefined,
+      playlistPath: undefined,
+      subtitlePath: undefined,
+      videoDir: baseDir,
+      updatedAt: Date.now(),
+      source: 'movie',
+      mediaKind: 'hls',
+    };
+    await persist(updated);
+    patchItemInStore(updated, id);
+    void runDownloadJob(id, request, baseDir);
+  },
+
+  failMovieResolve: async (id, message) => {
+    const item = await getDownload(id);
+    if (!item) return;
+    const updated: DownloadRecord = {
+      ...item,
+      status: 'failed',
+      error: message,
+      updatedAt: Date.now(),
+    };
+    await persist(updated);
+    patchItemInStore(updated, null);
   },
 
   remove: async (id) => {

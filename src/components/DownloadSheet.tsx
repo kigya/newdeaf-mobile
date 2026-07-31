@@ -10,11 +10,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { HlsSource, StreamPayload } from '@/src/api/types';
+import type { StreamPayload } from '@/src/api/types';
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { pickSubtitleTrack } from '@/src/downloads/hls';
+import { pickPrimaryMediaUrl, pickSubtitleTrack } from '@/src/downloads/hls';
 import { useDownloadsStore } from '@/src/downloads/store';
 import type { DownloadRecord } from '@/src/downloads/types';
+import { qualityOptions } from '@/src/player/streamPick';
 import { StreamResolver } from '@/src/player/StreamResolver';
 import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
@@ -29,14 +30,6 @@ type Props = {
   season?: number;
   episode?: number;
 };
-
-function qualityOptions(source: HlsSource | undefined): string[] {
-  if (!source) return [];
-  return Object.keys(source.quality)
-    .map(Number)
-    .sort((a, b) => b - a)
-    .map(String);
-}
 
 function norm(label: string): string {
   return label.trim().toLowerCase();
@@ -152,7 +145,7 @@ export function DownloadSheet({
         audioLabel: selected.label,
         quality,
         subtitleLabel: selectedSubtitle.label,
-        hlsUrl,
+        hlsUrl: pickPrimaryMediaUrl(hlsUrl),
         subtitleUrl: selectedSubtitle.src,
         season,
         episode,
@@ -205,13 +198,16 @@ export function DownloadSheet({
           {title}
         </Text>
 
-        {!payload && !error ? (
-          <StreamResolver
-            key={playerUrl}
-            playerUrl={playerUrl}
-            onResolved={onResolved}
-            onError={(message) => setError(message)}
-          />
+        {!error ? (
+          <View style={payload ? styles.hiddenPlayer : undefined}>
+            <StreamResolver
+              key={playerUrl}
+              playerUrl={playerUrl}
+              mediaFetch
+              onResolved={onResolved}
+              onError={(message) => setError(message)}
+            />
+          </View>
         ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -497,5 +493,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     marginVertical: spacing.md,
+  },
+  hiddenPlayer: {
+    height: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
 });

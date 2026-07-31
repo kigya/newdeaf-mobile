@@ -12,9 +12,17 @@ type Props = {
   onResolved: (payload: StreamPayload) => void;
   onError?: (message: string) => void;
   timeoutMs?: number;
+  /** Keep player iframe for WebView CDN downloads after resolve. */
+  mediaFetch?: boolean;
 };
 
-export function StreamResolver({ playerUrl, onResolved, onError, timeoutMs = 70000 }: Props) {
+export function StreamResolver({
+  playerUrl,
+  onResolved,
+  onError,
+  timeoutMs = 70000,
+  mediaFetch = false,
+}: Props) {
   const [status, setStatus] = useState(t('player.resolving'));
   const done = useRef(false);
 
@@ -39,6 +47,7 @@ export function StreamResolver({ playerUrl, onResolved, onError, timeoutMs = 700
           key={playerUrl}
           playerUrl={playerUrl}
           mode="resolve"
+          mediaFetch={mediaFetch}
           onReady={() => {}}
           onStatus={setStatus}
           onStream={(payload) => {

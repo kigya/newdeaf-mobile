@@ -1,8 +1,13 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import type { StreamPayload } from '@/src/api/types';
+import {
+  handleMediaFetchMessage,
+  registerMediaFetchInjector,
+  useMediaFetchStore,
+} from '@/src/downloads/mediaFetch';
 import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
 
@@ -17,6 +22,8 @@ export type PlayerProgressPayload = {
 type Props = {
   playerUrl: string;
   mode?: 'watch' | 'resolve';
+  /** When true (resolve mode), keep iframe available for CDN segment downloads. */
+  mediaFetch?: boolean;
   onStream?: (payload: StreamPayload) => void;
   onError?: (message: string) => void;
   onReady?: () => void;
@@ -28,6 +35,7 @@ type Props = {
 export function PlayerWebView({
   playerUrl,
   mode = 'watch',
+  mediaFetch = false,
   onStream,
   onError,
   onReady,
@@ -36,6 +44,9 @@ export function PlayerWebView({
 }: Props) {
   const [loading, setLoading] = useState(true);
   const resolvedRef = useRef(false);
+  const webRef = useRef<WebView>(null);
+  const setReady = useMediaFetchStore((s) => s.setReady);
+  const setPlayerUrl = useMediaFetchStore((s) => s.setPlayerUrl);
 
   // Player must run in a real iframe under newdeaf.top — top-level / rewritten HTML
   // produces an invalid Borth header and /bnsi returns 404.
@@ -64,6 +75,23 @@ export function PlayerWebView({
     [playerUrl]
   );
 
+  useEffect(() => {
+    if (!mediaFetch || mode !== 'resolve') return;
+
+    setPlayerUrl(playerUrl);
+    registerMediaFetchInjector((id, url, modeName) => {
+      const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode: modeName });
+      const js = `(function(){try{var f=document.getElementById('nd-player');if(f&&f.contentWindow){f.contentWindow.postMessage(${JSON.stringify(payload)},'*');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:'no iframe'}));}}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:String(e&&e.message||e)}));}})();true;`;
+      webRef.current?.injectJavaScript(js);
+    });
+
+    return () => {
+      registerMediaFetchInjector(null);
+      setReady(false);
+      // Don't clear playerUrl here — withMediaFetchPlayer owns teardown.
+    };
+  }, [mediaFetch, mode, playerUrl, setPlayerUrl, setReady]);
+
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
@@ -75,7 +103,15 @@ export function PlayerWebView({
           keys?: string[];
           currentTime?: number;
           duration?: number | null;
+          id?: string;
+          status?: number;
+          body?: string;
+          encoding?: 'base64';
+          error?: string;
+          index?: number;
+          count?: number;
         };
+        if (handleMediaFetchMessage(msg)) return;
         if (msg.type === 'ready') {
           onReady?.();
           return;
@@ -108,23 +144,26 @@ export function PlayerWebView({
           msg.type === 'stream' &&
           msg.data &&
           Array.isArray(msg.data.hlsSource) &&
-          msg.data.hlsSource.length > 0 &&
-          !resolvedRef.current
+          msg.data.hlsSource.length > 0
         ) {
-          resolvedRef.current = true;
-          onStream?.(msg.data);
+          if (mediaFetch) setReady(true);
+          if (!resolvedRef.current) {
+            resolvedRef.current = true;
+            onStream?.(msg.data);
+          }
         }
       } catch {
         // ignore non-json
       }
     },
-    [onError, onProgress, onReady, onStatus, onStream]
+    [mediaFetch, onError, onProgress, onReady, onStatus, onStream, setReady]
   );
 
   if (mode === 'resolve') {
     return (
       <View style={styles.resolveWrap} pointerEvents="none" collapsable={false}>
         <WebView
+          ref={webRef}
           source={{ html, baseUrl: 'https://newdeaf.top/' }}
           originWhitelist={['*']}
           javaScriptEnabled
@@ -150,6 +189,7 @@ export function PlayerWebView({
   return (
     <View style={styles.wrap}>
       <WebView
+        ref={webRef}
         source={{ html, baseUrl: 'https://newdeaf.top/' }}
         originWhitelist={['*']}
         javaScriptEnabled
