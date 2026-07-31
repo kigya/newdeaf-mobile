@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDownloadsStore } from '@/src/downloads/store';
 import { extractYoutubeVideoId } from '@/src/downloads/youtube';
+import { t } from '@/src/i18n';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 type Props = {
@@ -26,24 +30,62 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   const [url, setUrl] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const keyboardOpen = useRef(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        keyboardOpen.current = true;
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        keyboardOpen.current = false;
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   if (!visible) return null;
 
   const canStart = !!extractYoutubeVideoId(url) && !starting;
 
+  const resetAndClose = () => {
+    setUrl('');
+    setError(null);
+    setStarting(false);
+    Keyboard.dismiss();
+    onClose();
+  };
+
+  const onBackdropPress = () => {
+    if (keyboardOpen.current || keyboardHeight > 0) {
+      Keyboard.dismiss();
+      return;
+    }
+    // Sheet closes only via X (or successful start)
+  };
+
   const onStart = async () => {
     setError(null);
     if (!extractYoutubeVideoId(url)) {
-      setError('Вставьте корректную ссылку на YouTube');
+      setError(t('youtube.invalidUrl'));
       return;
     }
     setStarting(true);
     try {
       await enqueueYoutube(url.trim());
-      setUrl('');
-      onClose();
+      resetAndClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось начать загрузку');
+      setError(e instanceof Error ? e.message : t('youtube.startFailed'));
     } finally {
       setStarting(false);
     }
@@ -51,55 +93,68 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-        <View style={styles.handle} />
-        <View style={styles.header}>
-          <Text style={styles.title}>YouTube Video Downloader</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Ionicons name="close" size={24} color={colors.textMuted} />
+      <Pressable style={styles.backdrop} onPress={onBackdropPress} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+        style={styles.avoid}
+      >
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingBottom: Math.max(insets.bottom, spacing.lg) + (Platform.OS === 'android' ? 0 : 0),
+              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+              minHeight: 320,
+            },
+          ]}
+        >
+          <View style={styles.handle} />
+          <View style={styles.header}>
+            <Text style={styles.title}>{t('youtube.title')}</Text>
+            <Pressable onPress={resetAndClose} hitSlop={12}>
+              <Ionicons name="close" size={24} color={colors.textMuted} />
+            </Pressable>
+          </View>
+          <Text style={styles.subtitle}>{t('youtube.subtitle')}</Text>
+
+          <TextInput
+            style={styles.input}
+            value={url}
+            onChangeText={(text) => {
+              setUrl(text);
+              if (error) setError(null);
+            }}
+            placeholder={t('youtube.placeholder')}
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="done"
+            editable={!starting}
+            onSubmitEditing={() => {
+              if (canStart) void onStart();
+            }}
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <Pressable
+            style={[styles.cta, !canStart && styles.ctaDisabled]}
+            disabled={!canStart}
+            onPress={() => void onStart()}
+          >
+            {starting ? (
+              <ActivityIndicator color={colors.black} />
+            ) : (
+              <>
+                <Ionicons name="logo-youtube" size={22} color={colors.black} />
+                <Text style={styles.ctaText}>{t('youtube.cta')}</Text>
+              </>
+            )}
           </Pressable>
         </View>
-        <Text style={styles.subtitle}>
-          Вставьте ссылку на видео — оно появится в загрузках рядом с фильмами
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          value={url}
-          onChangeText={(text) => {
-            setUrl(text);
-            if (error) setError(null);
-          }}
-          placeholder="https://youtube.com/watch?v=…"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          returnKeyType="done"
-          editable={!starting}
-          onSubmitEditing={() => {
-            if (canStart) void onStart();
-          }}
-        />
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable
-          style={[styles.cta, !canStart && styles.ctaDisabled]}
-          disabled={!canStart}
-          onPress={() => void onStart()}
-        >
-          {starting ? (
-            <ActivityIndicator color={colors.black} />
-          ) : (
-            <>
-              <Ionicons name="logo-youtube" size={22} color={colors.black} />
-              <Text style={styles.ctaText}>Скачать видео</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -109,6 +164,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 50,
     justifyContent: 'flex-end',
+  },
+  avoid: {
+    width: '100%',
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -158,7 +216,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.regular,
     fontSize: 15,
-    minHeight: 52,
+    minHeight: 56,
   },
   error: {
     marginTop: spacing.sm,

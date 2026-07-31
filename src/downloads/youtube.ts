@@ -1,10 +1,21 @@
+import { Innertube } from 'youtubei.js/react-native';
+
+import { t } from '@/src/i18n';
+
 import type { DownloadMediaKind } from './types';
 
 const PIPED_INSTANCES = [
+  'https://pipedapi.r4fo.com',
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.adminforge.de',
-  'https://pipedapi.nosebs.ru',
   'https://api.piped.private.coffee',
+  'https://pipedapi.darkness.services',
+];
+
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.projectsegfau.lt',
+  'https://yewtu.be',
+  'https://inv.nadeko.net',
 ];
 
 type PipedVideoStream = {
@@ -13,7 +24,6 @@ type PipedVideoStream = {
   height?: number;
   videoOnly?: boolean;
   mimeType?: string;
-  format?: string;
 };
 
 type PipedStreamsResponse = {
@@ -21,6 +31,19 @@ type PipedStreamsResponse = {
   thumbnailUrl?: string;
   hls?: string | null;
   videoStreams?: PipedVideoStream[];
+  error?: string;
+};
+
+type InvidiousFormatStream = {
+  url?: string;
+  qualityLabel?: string;
+};
+
+type InvidiousVideoResponse = {
+  title?: string;
+  videoThumbnails?: { url: string; width?: number }[];
+  formatStreams?: InvidiousFormatStream[];
+  hlsUrl?: string;
   error?: string;
 };
 
@@ -91,79 +114,246 @@ function pickMuxedStream(streams: PipedVideoStream[]): PipedVideoStream | null {
   return muxed[0];
 }
 
-async function fetchFromInstance(
-  instance: string,
-  videoId: string
-): Promise<PipedStreamsResponse> {
+async function fetchJson<T>(url: string, timeoutMs = 12000): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${instance}/streams/${videoId}`, {
+    const res = await fetch(url, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
+    const text = await res.text();
     if (!res.ok) {
-      throw new Error(`Piped ${res.status}`);
+      throw new Error(`HTTP ${res.status}`);
     }
-    return (await res.json()) as PipedStreamsResponse;
+    if (text.trimStart().startsWith('<')) {
+      throw new Error('HTML response');
+    }
+    return JSON.parse(text) as T;
   } finally {
     clearTimeout(timer);
   }
 }
 
-export async function resolveYoutubeStream(youtubeUrl: string): Promise<ResolvedYoutubeStream> {
-  const videoId = extractYoutubeVideoId(youtubeUrl);
-  if (!videoId) {
-    throw new Error('Некорректная ссылка на YouTube');
+async function resolveFromPiped(instance: string, videoId: string): Promise<ResolvedYoutubeStream> {
+  const data = await fetchJson<PipedStreamsResponse>(`${instance}/streams/${videoId}`);
+  if (data.error) {
+    throw new Error(data.error);
   }
 
+  const title = (data.title ?? '').trim() || `YouTube ${videoId}`;
+  const posterUrl = data.thumbnailUrl || undefined;
+  const muxed = pickMuxedStream(data.videoStreams ?? []);
+
+  if (muxed) {
+    const height = parseQualityHeight(muxed) || 720;
+    return {
+      videoId,
+      title,
+      posterUrl,
+      quality: String(height),
+      mediaKind: 'progressive',
+      streamUrl: muxed.url,
+      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+    };
+  }
+
+  if (data.hls) {
+    return {
+      videoId,
+      title,
+      posterUrl,
+      quality: '720',
+      mediaKind: 'hls',
+      streamUrl: data.hls,
+      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+    };
+  }
+
+  throw new Error(t('youtube.noStream'));
+}
+
+function pickInvidiousMuxed(streams: InvidiousFormatStream[]): InvidiousFormatStream | null {
+  const usable = streams.filter((s) => typeof s.url === 'string' && s.url.length > 0);
+  if (!usable.length) return null;
+  const preferred = ['720p', '480p', '360p', '1080p', '240p'];
+  usable.sort((a, b) => {
+    const la = preferred.indexOf(a.qualityLabel ?? '');
+    const lb = preferred.indexOf(b.qualityLabel ?? '');
+    return (la === -1 ? 99 : la) - (lb === -1 ? 99 : lb);
+  });
+  return usable[0];
+}
+
+async function resolveFromInvidious(
+  instance: string,
+  videoId: string
+): Promise<ResolvedYoutubeStream> {
+  const data = await fetchJson<InvidiousVideoResponse>(`${instance}/api/v1/videos/${videoId}`);
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  const title = (data.title ?? '').trim() || `YouTube ${videoId}`;
+  const thumbs = [...(data.videoThumbnails ?? [])].sort(
+    (a, b) => (b.width ?? 0) - (a.width ?? 0)
+  );
+  const posterUrl = thumbs[0]?.url;
+  const muxed = pickInvidiousMuxed(data.formatStreams ?? []);
+
+  if (muxed?.url) {
+    const height = Number(String(muxed.qualityLabel ?? '').replace(/[^\d]/g, '')) || 720;
+    return {
+      videoId,
+      title,
+      posterUrl,
+      quality: String(height),
+      mediaKind: 'progressive',
+      streamUrl: muxed.url,
+      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+    };
+  }
+
+  if (data.hlsUrl) {
+    return {
+      videoId,
+      title,
+      posterUrl,
+      quality: '720',
+      mediaKind: 'hls',
+      streamUrl: data.hlsUrl,
+      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+    };
+  }
+
+  throw new Error(t('youtube.noStream'));
+}
+
+async function resolveFromYoutubei(videoId: string): Promise<ResolvedYoutubeStream> {
+  const clients = ['ANDROID', 'MWEB', 'IOS'] as const;
   let lastError: Error | null = null;
 
-  for (const instance of PIPED_INSTANCES) {
+  for (const client of clients) {
     try {
-      const data = await fetchFromInstance(instance, videoId);
-      if (data.error) {
-        throw new Error(data.error);
+      const yt = await Innertube.create({
+        generate_session_locally: true,
+      });
+      const info = await yt.getBasicInfo(videoId, { client });
+      const title = info.basic_info?.title?.trim() || `YouTube ${videoId}`;
+      const posterUrl = info.basic_info?.thumbnail?.[0]?.url;
+
+      const formats = info.streaming_data?.formats ?? [];
+      const withUrl: { qualityLabel?: string; height?: number; streamUrl: string }[] = [];
+      for (const f of formats) {
+        try {
+          const streamUrl = f.url || (await f.decipher(yt.session.player));
+          if (streamUrl) {
+            withUrl.push({
+              qualityLabel: f.quality_label,
+              height: f.height,
+              streamUrl,
+            });
+          }
+        } catch {
+          // skip
+        }
       }
 
-      const title = (data.title ?? '').trim() || `YouTube ${videoId}`;
-      const posterUrl = data.thumbnailUrl || undefined;
-      const muxed = pickMuxedStream(data.videoStreams ?? []);
-
-      if (muxed) {
-        const height = parseQualityHeight(muxed) || 720;
+      if (withUrl.length) {
+        withUrl.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+        const best = withUrl[0];
+        const height =
+          Number(String(best.qualityLabel ?? '').replace(/[^\d]/g, '')) ||
+          Number(best.height) ||
+          240;
         return {
           videoId,
           title,
           posterUrl,
           quality: String(height),
           mediaKind: 'progressive',
-          streamUrl: muxed.url,
+          streamUrl: best.streamUrl,
           youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
         };
       }
 
-      if (data.hls) {
+      try {
+        const fmt = info.chooseFormat({ type: 'video+audio', quality: 'bestefficiency' });
+        const streamUrl = fmt.url || (await fmt.decipher(yt.session.player));
+        if (streamUrl) {
+          const height =
+            Number(String(fmt.quality_label ?? '').replace(/[^\d]/g, '')) ||
+            Number(fmt.height) ||
+            240;
+          return {
+            videoId,
+            title,
+            posterUrl,
+            quality: String(height),
+            mediaKind: 'progressive',
+            streamUrl,
+            youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+          };
+        }
+      } catch {
+        // no muxed chooseFormat
+      }
+
+      const hls = info.streaming_data?.hls_manifest_url;
+      if (hls) {
         return {
           videoId,
           title,
           posterUrl,
           quality: '720',
           mediaKind: 'hls',
-          streamUrl: data.hls,
+          streamUrl: hls,
           youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
         };
       }
 
-      throw new Error('Нет доступного потока для скачивания');
+      throw new Error(t('youtube.noStream'));
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
     }
   }
 
+  throw lastError ?? new Error(t('youtube.noStream'));
+}
+
+export async function resolveYoutubeStream(youtubeUrl: string): Promise<ResolvedYoutubeStream> {
+  const videoId = extractYoutubeVideoId(youtubeUrl);
+  if (!videoId) {
+    throw new Error(t('youtube.badLink'));
+  }
+
+  let lastError: Error | null = null;
+
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      return await resolveFromPiped(instance, videoId);
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+    }
+  }
+
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      return await resolveFromInvidious(instance, videoId);
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+    }
+  }
+
+  try {
+    return await resolveFromYoutubei(videoId);
+  } catch (e) {
+    lastError = e instanceof Error ? e : new Error(String(e));
+  }
+
   throw new Error(
     lastError?.message
-      ? `Не удалось получить поток: ${lastError.message}`
-      : 'Не удалось получить поток, попробуйте позже'
+      ? t('youtube.streamFailed', { reason: lastError.message })
+      : t('youtube.streamFailedGeneric')
   );
 }
