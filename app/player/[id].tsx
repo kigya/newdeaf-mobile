@@ -10,6 +10,8 @@ import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 import { useWatchProgressStore } from '@/src/watch-progress/store';
 
+const PROGRESS_THROTTLE_MS = 5000;
+
 function parseOptionalInt(value?: string): number | undefined {
   if (value == null || value === '') return undefined;
   const n = Number(value);
@@ -50,6 +52,7 @@ export default function OnlinePlayerScreen() {
 
   const lastPositionRef = useRef(startTime > 0 ? startTime : 0);
   const lastDurationRef = useRef<number | undefined>(undefined);
+  const lastProgressAtRef = useRef(0);
   const metaRef = useRef({
     movieId: resolvedMovieId,
     title: title ?? t('common.player'),
@@ -70,10 +73,12 @@ export default function OnlinePlayerScreen() {
   };
 
   const saveProgress = useCallback(
-    (positionSec: number, durationSec?: number) => {
+    (positionSec: number, durationSec?: number, force = false) => {
       const meta = metaRef.current;
       if (!meta.movieId) return;
-      // Always remember at least that this episode/title was opened.
+      const now = Date.now();
+      if (!force && now - lastProgressAtRef.current < PROGRESS_THROTTLE_MS) return;
+      lastProgressAtRef.current = now;
       const position = Math.max(0, positionSec);
       void upsertProgress({
         movieId: meta.movieId,
@@ -103,17 +108,17 @@ export default function OnlinePlayerScreen() {
   // Seed progress when opening (episode/title) even if time hook never fires.
   useEffect(() => {
     if (!resolvedMovieId) return;
-    saveProgress(lastPositionRef.current, lastDurationRef.current);
+    saveProgress(lastPositionRef.current, lastDurationRef.current, true);
   }, [resolvedMovieId, saveProgress]);
 
   useEffect(() => {
     return () => {
-      saveProgress(lastPositionRef.current, lastDurationRef.current);
+      saveProgress(lastPositionRef.current, lastDurationRef.current, true);
     };
   }, [saveProgress]);
 
   const handleClose = () => {
-    saveProgress(lastPositionRef.current, lastDurationRef.current);
+    saveProgress(lastPositionRef.current, lastDurationRef.current, true);
     router.back();
   };
 
