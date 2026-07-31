@@ -299,12 +299,7 @@ export function parseMovieDetail(html: string, fallbackHref: string): MovieDetai
     html.match(/id="l-\d+"[^>]*>\s*\+?(\d+)/i)?.[1] ??
     html.match(/class="count"[^>]*>\+?(\d+)/i)?.[1];
 
-  const playerMatch =
-    html.match(/src="(https?:\/\/[^"]*stloadi\.live[^"]+)"/i) ??
-    html.match(/src="(https?:\/\/biorn-as\.[^"]+)"/i) ??
-    html.match(/src="(https?:\/\/[^"]+:9443\/\?token=[^"]+)"/i);
-
-  const playerUrl = playerMatch?.[1];
+  const { playerUrl, fallbackPlayerUrl, nativePlayer } = pickPlayerUrls(html);
   let playerToken: string | undefined;
   let tokenMovie: string | undefined;
   let translationId: string | undefined;
@@ -351,6 +346,8 @@ export function parseMovieDetail(html: string, fallbackHref: string): MovieDetai
     actors,
     director,
     playerUrl,
+    fallbackPlayerUrl,
+    nativePlayer,
     playerToken,
     tokenMovie,
     translationId,
@@ -360,6 +357,120 @@ export function parseMovieDetail(html: string, fallbackHref: string): MovieDetai
     trailerUrl,
     trailerYoutubeId,
     originalTitle,
+  };
+}
+
+/** Hosts that expose bnsi / hlsSource capture for native HLS. */
+export function isNativeBalancerUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host.includes('stloadi.live') ||
+      host.includes('stravers.live') ||
+      host.startsWith('biorn-as.') ||
+      /:9443\b/.test(url)
+    );
+  } catch {
+    return /stloadi\.live|stravers\.live|biorn-as\.|:9443/i.test(url);
+  }
+}
+
+function isPrerollContext(html: string, src: string): boolean {
+  // Only treat as ad preroll when this exact iframe sits in a short preroll wrapper
+  // that also looks like the first stloadi bump (same id is reused for real players).
+  const re = new RegExp(
+    `<[^>]+id=["']preroll["'][^>]*>\\s*<iframe\\b[^>]*src=["']${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`,
+    'i'
+  );
+  if (!re.test(html)) return false;
+  // Prefer not to drop high-season / token_movie players even inside preroll id.
+  try {
+    const u = new URL(src);
+    const season = Number(u.searchParams.get('season') ?? '');
+    if (Number.isFinite(season) && season >= 2) return false;
+    if (u.searchParams.get('token_movie') && season !== 1) return false;
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
+function scoreNativeCandidate(url: string, html: string, rawSrcForMatch?: string): number {
+  let score = 0;
+  if (isPrerollContext(html, rawSrcForMatch ?? url)) score -= 80;
+  try {
+    const u = new URL(url);
+    if (u.searchParams.get('token_movie')) score += 50;
+    if (u.searchParams.get('token')) score += 10;
+    const season = Number(u.searchParams.get('season') ?? '');
+    if (Number.isFinite(season) && season > 0) score += season * 5;
+    const host = u.hostname.toLowerCase();
+    if (host.includes('stravers.live')) score += 30;
+    if (host.includes('stloadi.live')) score += 25;
+    if (host.startsWith('biorn-as.')) score += 20;
+  } catch {
+    // ignore
+  }
+  return score;
+}
+
+type PickedPlayers = {
+  playerUrl?: string;
+  fallbackPlayerUrl?: string;
+  nativePlayer: boolean;
+};
+
+function normalizePlayerSrc(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).href;
+  } catch {
+    return trimmed;
+  }
+}
+
+function pickPlayerUrls(html: string): PickedPlayers {
+  const iframeSrcs = [
+    ...html.matchAll(/<iframe\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["']/gi),
+  ]
+    .map((m) => {
+      const raw = m[1];
+      const normalized = normalizePlayerSrc(raw);
+      if (!normalized) return null;
+      return { raw, normalized };
+    })
+    .filter((entry): entry is { raw: string; normalized: string } => Boolean(entry));
+
+  const byNormalized = new Map<string, string>();
+  for (const { raw, normalized } of iframeSrcs) {
+    if (!byNormalized.has(normalized)) byNormalized.set(normalized, raw);
+  }
+  const unique = [...byNormalized.keys()];
+  const nativeCandidates = unique.filter(isNativeBalancerUrl);
+  nativeCandidates.sort(
+    (a, b) =>
+      scoreNativeCandidate(b, html, byNormalized.get(b) ?? b) -
+      scoreNativeCandidate(a, html, byNormalized.get(a) ?? a)
+  );
+
+  const bestNative = nativeCandidates[0];
+  if (bestNative) {
+    return { playerUrl: bestNative, nativePlayer: true };
+  }
+
+  // Prefer first non-sidebar-ish video embed as WebView fallback.
+  const fallback =
+    unique.find(
+      (u) =>
+        /embess\.ws|kinoserial\.net|fsst\.online|videocdn|alloha|kodik|voidboost/i.test(u) &&
+        !/newdeaf\.ru|filmy-na-angliskom/i.test(u)
+    ) ?? unique.find((u) => !/newdeaf\.ru|filmy-na-angliskom|youtube\.com|youtu\.be/i.test(u));
+
+  return {
+    playerUrl: fallback,
+    fallbackPlayerUrl: fallback,
+    nativePlayer: false,
   };
 }
 

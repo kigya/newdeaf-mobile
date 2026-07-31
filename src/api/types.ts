@@ -20,6 +20,10 @@ export type MovieDetail = MovieSummary & {
   actors: string[];
   director?: string;
   playerUrl?: string;
+  /** Third-party embed when native balancer is unavailable (WebView fallback). */
+  fallbackPlayerUrl?: string;
+  /** True when playerUrl is a bnsi-compatible balancer (stloadi/stravers/biorn). */
+  nativePlayer?: boolean;
   playerToken?: string;
   tokenMovie?: string;
   translationId?: string;
