@@ -12,6 +12,12 @@ import {
   type ByteRange,
   type HlsDownloadJob,
 } from '@/src/features/downloads/hlsPlaylist';
+import {
+  mediaUrlCandidates,
+  pickPrimaryMediaUrl,
+  resolveUrl,
+} from '@/src/features/downloads/urlHelpers';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 
 export {
   base64DecodedLength,
@@ -20,19 +26,10 @@ export {
   stripByteRangeAttribute,
 } from '@/src/features/downloads/hlsPlaylist';
 
+export { mediaUrlCandidates, pickPrimaryMediaUrl } from '@/src/features/downloads/urlHelpers';
+
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-
-function resolveUrl(base: string, relative: string): string {
-  if (relative.startsWith('http://') || relative.startsWith('https://')) return relative;
-  if (relative.startsWith('//')) return `https:${relative}`;
-  try {
-    return new URL(relative, base).toString();
-  } catch {
-    const trimmed = base.replace(/\/[^/]*$/, '/');
-    return `${trimmed}${relative.replace(/^\//, '')}`;
-  }
-}
 
 export function resolveMediaUrl(base: string, relative: string): string {
   return pickPrimaryMediaUrl(resolveUrl(base, relative));
@@ -231,26 +228,6 @@ export async function downloadRemoteFile(
 }
 
 /**
- * Balancer quality entries are sometimes failover pairs:
- * `https://a.../master.m3u8 or https://b.../index`
- * Native players and fetch must receive a single absolute URL.
- */
-export function pickPrimaryMediaUrl(url: string): string {
-  return mediaUrlCandidates(url)[0] ?? url.trim();
-}
-
-/** All absolute candidates from a balancer "a or b" quality string. */
-export function mediaUrlCandidates(url: string): string[] {
-  const trimmed = url.trim();
-  if (!trimmed) return [];
-  const parts = trimmed
-    .split(/\s+or\s+/i)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return parts.length ? parts : [trimmed];
-}
-
-/**
  * vkvideo.cloud playlists require Origin; OkHttp is fingerprint-blocked on some
  * device networks. Prefer Chrome WebView iframe fetch, fall back to OkHttp.
  */
@@ -292,7 +269,7 @@ async function fetchText(url: string, playerUrl?: string): Promise<string> {
       }
       lastError = `Failed to fetch playlist: ${lastStatus || 'network'}`;
     } catch (e) {
-      lastError = e instanceof Error ? e.message : `Failed to fetch playlist: network`;
+      lastError = errorMessage(e, `Failed to fetch playlist: network`);
     } finally {
       try {
         await FileSystem.deleteAsync(tmpPath, { idempotent: true });

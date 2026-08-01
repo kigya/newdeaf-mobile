@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { cueAtTime, parseVtt, type VttCue } from '@/src/features/playback/offline/vtt';
 import { ensureFileUri } from '@/src/features/playback/offline/prepareLocalSource';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, spacing } from '@/src/shared/theme';
 
 const PROGRESS_THROTTLE_MS = 5000;
@@ -151,7 +152,7 @@ export function MediaPlayer({
       } catch (e) {
         preservePositionRef.current = null;
         if (!cancelled) {
-          setPlayerError(e instanceof Error ? e.message : t('offline.playbackError'));
+          setPlayerError(errorMessage(e, t('offline.playbackError')));
         }
       }
     })();

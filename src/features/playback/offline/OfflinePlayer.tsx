@@ -7,6 +7,7 @@ import {
 } from '@/src/features/playback/MediaPlayer';
 import { prepareLocalPlaybackUri } from '@/src/features/playback/offline/prepareLocalSource';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, spacing } from '@/src/shared/theme';
 
 export type OfflineProgressPayload = MediaProgressPayload;
@@ -44,7 +45,7 @@ export function OfflinePlayer({
         if (!cancelled) setReadyUri(uri);
       } catch (e) {
         if (!cancelled) {
-          setPrepareError(e instanceof Error ? e.message : t('offline.playbackError'));
+          setPrepareError(errorMessage(e, t('offline.playbackError')));
         }
       }
     })();

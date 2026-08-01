@@ -9,6 +9,7 @@ import { GenresBanner } from '@/src/shared/ui/GenresBanner';
 import { MovieGrid } from '@/src/shared/ui/MovieGrid';
 import { Screen } from '@/src/shared/ui/Screen';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, spacing } from '@/src/shared/theme';
 import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 import type { WatchProgressRecord } from '@/src/features/watch-progress/types';
@@ -49,7 +50,7 @@ export default function CatalogScreen() {
       setPage(targetPage);
     } catch (e) {
       if (reqId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e.message : t('catalog.loadError'));
+      setError(errorMessage(e, t('catalog.loadError')));
     }
   }, []);
 

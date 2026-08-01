@@ -4,6 +4,8 @@
  * past EOF on fMP4/CMAF segments.
  */
 
+import { pickPrimaryMediaUrl, resolveUrl } from '@/src/features/downloads/urlHelpers';
+
 export type ByteRange = { offset: number; length: number };
 
 export type HlsDownloadJob = {
@@ -44,27 +46,6 @@ export function isByteRangeTag(line: string): boolean {
   return /^#EXT-X-BYTERANGE:/i.test(line.trim());
 }
 
-function resolveUrl(base: string, relative: string): string {
-  if (relative.startsWith('http://') || relative.startsWith('https://')) return relative;
-  if (relative.startsWith('//')) return `https:${relative}`;
-  try {
-    return new URL(relative, base).toString();
-  } catch {
-    const trimmed = base.replace(/\/[^/]*$/, '/');
-    return `${trimmed}${relative.replace(/^\//, '')}`;
-  }
-}
-
-function pickPrimary(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed) return trimmed;
-  const parts = trimmed
-    .split(/\s+or\s+/i)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return parts[0] ?? trimmed;
-}
-
 function mediaExt(abs: string, isKey: boolean): string {
   if (isKey) return 'key';
   if (abs.includes('.mp4')) return 'mp4';
@@ -101,7 +82,7 @@ export function planHlsOfflineDownload(
     if (line.startsWith('#')) {
       const mapUri = line.match(/URI="([^"]+)"/)?.[1];
       if (mapUri && (line.includes('EXT-X-MAP') || line.includes('EXT-X-KEY'))) {
-        const abs = pickPrimary(resolveUrl(variantUrl, mapUri));
+        const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, mapUri));
         const isKey = line.includes('EXT-X-KEY');
         const attrRange = line.match(/BYTERANGE="([^"]+)"/i)?.[1];
         const byteRange = attrRange ? parseByteRangeSpec(attrRange) : null;
@@ -121,7 +102,7 @@ export function planHlsOfflineDownload(
       continue;
     }
 
-    const abs = pickPrimary(resolveUrl(variantUrl, line));
+    const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, line));
     const ext = abs.includes('.m4s') ? 'm4s' : abs.includes('.mp4') ? 'mp4' : 'ts';
     const localName = `seg_${String(mediaIndex).padStart(5, '0')}.${ext}`;
     jobs.push({

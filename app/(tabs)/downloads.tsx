@@ -13,6 +13,7 @@ import { useDownloadsStore } from '@/src/features/downloads/store';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { StreamResolver } from '@/src/features/playback/StreamResolver';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
 
 function statusLabel(item: DownloadRecord): string {
@@ -196,7 +197,7 @@ export default function DownloadsScreen() {
               onResolved={(payload) => {
                 if (resolvingMovie && mediaFetchMovie.id === resolvingMovie.id) {
                   void completeMovieRetry(resolvingMovie.id, payload).catch((e) =>
-                    setRetryError(e instanceof Error ? e.message : t('downloads.retryFailed'))
+                    setRetryError(errorMessage(e, t('downloads.retryFailed')))
                   );
                 }
               }}
@@ -237,7 +238,7 @@ export default function DownloadsScreen() {
                 }
                 onRetry={() => {
                   void retry(item.id).catch((e) =>
-                    setRetryError(e instanceof Error ? e.message : t('downloads.retryFailed'))
+                    setRetryError(errorMessage(e, t('downloads.retryFailed')))
                   );
                 }}
                 onDelete={() => setPendingDelete(item)}

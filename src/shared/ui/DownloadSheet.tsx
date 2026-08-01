@@ -13,11 +13,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { pickPrimaryMediaUrl, pickSubtitleTrack } from '@/src/features/downloads/hls';
+import { findAnyExistingMovie, findExistingSameTracks } from '@/src/features/downloads/match';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { qualityOptions } from '@/src/features/playback/streamPick';
 import { StreamResolver } from '@/src/features/playback/StreamResolver';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { pickPreferredQuality } from '@/src/features/settings/pickPreferredQuality';
 import { useSettingsStore } from '@/src/features/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
@@ -32,50 +34,6 @@ type Props = {
   season?: number;
   episode?: number;
 };
-
-function norm(label: string): string {
-  return label.trim().toLowerCase();
-}
-
-function findExistingSameTracks(
-  items: DownloadRecord[],
-  movieId: string,
-  audioLabel: string,
-  subtitleLabel: string
-): DownloadRecord | undefined {
-  const a = norm(audioLabel);
-  const s = norm(subtitleLabel);
-  return items.find(
-    (i) =>
-      i.source !== 'youtube' &&
-      i.movieId === movieId &&
-      norm(i.audioLabel) === a &&
-      norm(i.subtitleLabel) === s &&
-      (i.status === 'completed' ||
-        i.status === 'queued' ||
-        i.status === 'downloading' ||
-        i.status === 'resolving' ||
-        i.status === 'failed' ||
-        i.status === 'paused')
-  );
-}
-
-function findAnyExistingMovie(
-  items: DownloadRecord[],
-  movieId: string
-): DownloadRecord | undefined {
-  return items.find(
-    (i) =>
-      i.source !== 'youtube' &&
-      i.movieId === movieId &&
-      (i.status === 'completed' ||
-        i.status === 'queued' ||
-        i.status === 'downloading' ||
-        i.status === 'resolving' ||
-        i.status === 'failed' ||
-        i.status === 'paused')
-  );
-}
 
 /** In-screen sheet — no RN Modal (avoids Android back/overlay bugs with WebView). */
 export function DownloadSheet({
@@ -157,7 +115,7 @@ export function DownloadSheet({
       });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('downloadSheet.startFailed'));
+      setError(errorMessage(e, t('downloadSheet.startFailed')));
     } finally {
       setStarting(false);
     }

@@ -6,6 +6,7 @@ import { fetchGenreMovies } from '@/src/data/catalog/catalog';
 import type { MovieSummary } from '@/src/data/catalog/types';
 import { MovieGrid } from '@/src/shared/ui/MovieGrid';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, spacing } from '@/src/shared/theme';
 import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
@@ -52,7 +53,7 @@ export default function GenreMoviesScreen() {
         setPage(targetPage);
       } catch (e) {
         if (reqId !== requestIdRef.current) return;
-        setError(e instanceof Error ? e.message : t('common.loadingError'));
+        setError(errorMessage(e, t('common.loadingError')));
         if (mode === 'replace') setMovies([]);
       }
     },

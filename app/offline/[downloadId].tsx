@@ -8,6 +8,7 @@ import { getDownload } from '@/src/features/downloads/db';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { t } from '@/src/shared/i18n';
 import { OfflinePlayer } from '@/src/features/playback/offline/OfflinePlayer';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts } from '@/src/shared/theme';
 import { resumeDialogMessage } from '@/src/features/watch-progress/format';
 import { fetchProgress, useWatchProgressStore } from '@/src/features/watch-progress/store';
@@ -60,7 +61,7 @@ export default function OfflinePlayerScreen() {
           setPlayMode('playing');
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : t('common.error'));
+        if (!cancelled) setError(errorMessage(e, t('common.error')));
       }
     })();
     return () => {

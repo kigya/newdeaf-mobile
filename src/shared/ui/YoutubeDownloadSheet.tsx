@@ -21,6 +21,7 @@ import {
   type YoutubeQualityOption,
 } from '@/src/features/downloads/youtube';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { pickPreferredQuality } from '@/src/features/settings/pickPreferredQuality';
 import { useSettingsStore } from '@/src/features/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
@@ -113,7 +114,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
       setQuality(pickPreferredQuality(available, preferredDownloadQuality));
       setStep('quality');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('youtube.startFailed'));
+      setError(errorMessage(e, t('youtube.startFailed')));
     } finally {
       setProbing(false);
     }
@@ -126,7 +127,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
       await enqueueYoutube(url.trim(), quality);
       resetAndClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('youtube.startFailed'));
+      setError(errorMessage(e, t('youtube.startFailed')));
     } finally {
       setStarting(false);
     }

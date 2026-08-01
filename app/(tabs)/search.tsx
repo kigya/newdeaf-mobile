@@ -14,6 +14,7 @@ import type { MovieSummary } from '@/src/data/catalog/types';
 import { MovieGrid } from '@/src/shared/ui/MovieGrid';
 import { Screen } from '@/src/shared/ui/Screen';
 import { t } from '@/src/shared/i18n';
+import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
 import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
@@ -56,7 +57,7 @@ export default function SearchScreen() {
       setMovies(items);
     } catch (e) {
       if (reqId !== requestIdRef.current) return;
-      setError(e instanceof Error ? e.message : t('search.error'));
+      setError(errorMessage(e, t('search.error')));
       setMovies([]);
     } finally {
       if (reqId === requestIdRef.current) setLoading(false);
