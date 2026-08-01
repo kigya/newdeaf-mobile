@@ -43,6 +43,7 @@ Users need title metadata and a way to watch online with the site player (qualit
 | Loading details | Full-screen spinner |
 | Missing poster/ratings | Graceful degrade |
 | `nativePlayer === false` (embess) | Resolve embed streams; download enabled when payload non-empty |
+| Embess fail + fsst sibling | Soft-fallback to progressive fsst qualities via `fallbackPlayerUrl` |
 | `nativePlayer === false` (other) | Download disabled; watch via embed still |
 | No playerUrl | Watch disabled; error copy |
 | Player load failure | Error copy; user can leave |
@@ -54,7 +55,7 @@ Users need title metadata and a way to watch online with the site player (qualit
 ## Technical context
 
 - Online path is **WebView-first** (`PlayerWebView`), not expo-video
-- Stream resolve: `StreamResolver` (70s timeout) for native balancers; `resolveEmbedStream` for embess embeds
+- Stream resolve: `StreamResolver` (70s timeout) for native balancers; `resolveEmbedStream` for embess embeds (then fsst `fallbackPlayerUrl` if embess fails)
 - `streamPick.qualityOptions`
 - Skills: `newdeaf-playback`, `newdeaf-ui`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)

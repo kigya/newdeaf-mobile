@@ -654,6 +654,28 @@ describe('MovieDetailScreen', () => {
     );
   });
 
+  it('falls back to fsst when embess resolve returns empty', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        nativePlayer: false,
+        playerUrl: 'https://api.embess.ws/embed/movie/1',
+        fallbackPlayerUrl: 'https://fsst.online/embed/1019620/',
+      })
+    );
+    mockResolveEmbedStream.mockImplementation(async (url: string) => {
+      if (/embess/i.test(url)) return null;
+      return {
+        hlsSource: [{ label: 'Default', quality: { '720': 'https://cdn/x_720.mp4' } }],
+        tracks: [{ kind: 'captions', label: '—', src: '' }],
+      };
+    });
+    await render(<MovieDetailScreen />);
+    await waitFor(() => expect(screen.getByText('Default')).toBeTruthy());
+    expect(mockResolveEmbedStream).toHaveBeenCalledWith('https://api.embess.ws/embed/movie/1');
+    expect(mockResolveEmbedStream).toHaveBeenCalledWith('https://fsst.online/embed/1019620/');
+    expect(screen.queryByText(t('movie.downloadUnavailable'))).toBeNull();
+  });
+
   it('shows tracksUnavailable when embess resolve throws', async () => {
     mockFetchMovieDetail.mockResolvedValue(
       baseMovie({

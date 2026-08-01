@@ -182,29 +182,42 @@ export default function MovieDetailScreen() {
                 }
               }
             }
-          } else if (isResolvableEmbedUrl(detail.playerUrl)) {
-            setStreamLoading(true);
-            setStreamError(null);
-            try {
-              const embed = await resolveEmbedStream(detail.playerUrl);
-              /* istanbul ignore next -- unmount during embed resolve */
-              if (cancelled) return;
-              if (embed?.hlsSource?.length) {
-                setStream(embed);
-                setStreamError(null);
-              } else {
-                setStreamError(t('movie.tracksUnavailable'));
-              }
-              setStreamLoading(false);
-            } catch {
-              /* istanbul ignore next -- unmount during embed resolve */
-              if (cancelled) return;
-              setStreamError(t('movie.tracksUnavailable'));
-              setStreamLoading(false);
-            }
           } else {
-            setStreamLoading(false);
-            setStreamError(t('movie.tracksUnavailable'));
+            const candidates = [...new Set(
+              [detail.playerUrl, detail.fallbackPlayerUrl].filter(
+                (u): u is string => typeof u === 'string' && u.length > 0 && isResolvableEmbedUrl(u)
+              )
+            )];
+            if (candidates.length > 0) {
+              setStreamLoading(true);
+              setStreamError(null);
+              try {
+                let embed: StreamPayload | null = null;
+                for (const url of candidates) {
+                  embed = await resolveEmbedStream(url);
+                  /* istanbul ignore next -- unmount during embed resolve */
+                  if (cancelled) return;
+                  if (embed?.hlsSource?.length) break;
+                }
+                /* istanbul ignore next -- unmount during embed resolve */
+                if (cancelled) return;
+                if (embed?.hlsSource?.length) {
+                  setStream(embed);
+                  setStreamError(null);
+                } else {
+                  setStreamError(t('movie.tracksUnavailable'));
+                }
+                setStreamLoading(false);
+              } catch {
+                /* istanbul ignore next -- unmount during embed resolve */
+                if (cancelled) return;
+                setStreamError(t('movie.tracksUnavailable'));
+                setStreamLoading(false);
+              }
+            } else {
+              setStreamLoading(false);
+              setStreamError(t('movie.tracksUnavailable'));
+            }
           }
         }
       } catch (e) {

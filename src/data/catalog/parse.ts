@@ -460,17 +460,24 @@ function pickPlayerUrls(html: string): PickedPlayers {
     return { playerUrl: bestNative, nativePlayer: true };
   }
 
-  // Prefer first non-sidebar-ish video embed as WebView fallback.
-  const fallback =
-    unique.find(
-      (u) =>
-        /embess\.ws|kinoserial\.net|fsst\.online|videocdn|alloha|kodik|voidboost/i.test(u) &&
-        !/newdeaf\.ru|filmy-na-angliskom/i.test(u)
-    ) ?? unique.find((u) => !/newdeaf\.ru|filmy-na-angliskom|youtube\.com|youtu\.be/i.test(u));
+  // Prefer embess (rich demuxed audio/subs) over progressive/other embeds for download resolve.
+  const embess = unique.find((u) => /embess\.ws/i.test(u));
+  const fsst = unique.find((u) => /fsst\.online|incvideo/i.test(u));
+  const otherEmbed = unique.find(
+    (u) =>
+      /kinoserial\.net|videocdn|alloha|kodik|voidboost/i.test(u) &&
+      !/newdeaf\.ru|filmy-na-angliskom/i.test(u)
+  );
+  const primary =
+    embess ??
+    fsst ??
+    otherEmbed ??
+    unique.find((u) => !/newdeaf\.ru|filmy-na-angliskom|youtube\.com|youtu\.be/i.test(u));
+  const softFallback = fsst && fsst !== primary ? fsst : undefined;
 
   return {
-    playerUrl: fallback,
-    fallbackPlayerUrl: fallback,
+    playerUrl: primary,
+    fallbackPlayerUrl: softFallback ?? primary,
     nativePlayer: false,
   };
 }
