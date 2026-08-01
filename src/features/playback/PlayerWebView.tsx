@@ -59,8 +59,8 @@ export function PlayerWebView({
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <style>
-    html, body { margin:0; padding:0; background:#000; width:100%; height:100%; overflow:hidden; }
-    iframe { position:fixed; inset:0; width:100%; height:100%; border:0; background:#000; }
+    html, body { margin:0; padding:0; background:${colors.black}; width:100%; height:100%; overflow:hidden; }
+    iframe { position:fixed; inset:0; width:100%; height:100%; border:0; background:${colors.black}; }
   </style>
 </head>
 <body>

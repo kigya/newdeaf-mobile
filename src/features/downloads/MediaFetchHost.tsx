@@ -7,6 +7,7 @@ import {
   registerMediaFetchInjector,
   useMediaFetchStore,
 } from '@/src/features/downloads/mediaFetch';
+import { colors } from '@/src/shared/theme';
 
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
@@ -52,7 +53,7 @@ export function MediaFetchHost() {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
-<body style="margin:0;background:#000">
+<body style="margin:0;background:${colors.black}">
   <iframe
     id="nd-player"
     src="${playerUrl.replace(/"/g, '&quot;')}"
@@ -128,6 +129,6 @@ const styles = StyleSheet.create({
   web: {
     width: 320,
     height: 180,
-    backgroundColor: '#000',
+    backgroundColor: colors.black,
   },
 });

@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: colors.blackOverlay12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
   },
   sub: {
     marginTop: 2,
-    color: 'rgba(0,0,0,0.7)',
+    color: colors.blackOverlay70,
     fontFamily: fonts.regular,
     fontSize: 12,
   },

@@ -106,6 +106,8 @@ export const ru = {
     quality480: '480p',
     quality360: '360p',
     version: 'Версия %{version}',
+    madeBy: 'Сделано ',
+    madeByLink: 'kigya',
   },
   favorites: {
     title: 'Избранное',

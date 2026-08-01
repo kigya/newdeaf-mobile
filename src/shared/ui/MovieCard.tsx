@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 3,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: colors.blackOverlay45,
   },
   progressFill: {
     height: '100%',

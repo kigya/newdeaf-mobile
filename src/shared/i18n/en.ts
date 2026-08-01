@@ -108,6 +108,8 @@ export const en: TranslationKeys = {
     quality480: '480p',
     quality360: '360p',
     version: 'Version %{version}',
+    madeBy: 'Made by ',
+    madeByLink: 'kigya',
   },
   favorites: {
     title: 'Favorites',

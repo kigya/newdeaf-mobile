@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { sheetStyles } from '@/src/shared/ui/sheetStyles';
 import { pickPrimaryMediaUrl, pickSubtitleTrack } from '@/src/features/downloads/hls';
 import { findAnyExistingMovie, findExistingSameTracks } from '@/src/features/downloads/match';
 import { useDownloadsStore } from '@/src/features/downloads/store';
@@ -147,11 +148,11 @@ export function DownloadSheet({
     season != null && episode != null ? t('downloadSheet.titleEpisode') : t('downloadSheet.title');
 
   return (
-    <View style={styles.root} pointerEvents="box-none">
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <View style={sheetStyles.root} pointerEvents="box-none">
+      <Pressable style={sheetStyles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.handle} />
-        <View style={styles.header}>
+        <View style={sheetStyles.handle} />
+        <View style={sheetStyles.header}>
           <Text style={styles.title}>{sheetTitle}</Text>
           <Pressable onPress={onClose} hitSlop={10}>
             <Ionicons name="close" size={24} color={colors.textSecondary} />
@@ -193,10 +194,10 @@ export function DownloadSheet({
                           : pickPreferredQuality(qs, preferredDownloadQuality)
                       );
                     }}
-                    style={[styles.chip, active && styles.chipActive]}
+                    style={[styles.chip, active && sheetStyles.chipActive]}
                   >
                     <Text
-                      style={[styles.chipText, active && styles.chipTextActive]}
+                      style={[styles.chipText, active && sheetStyles.chipTextActive]}
                       numberOfLines={2}
                     >
                       {source.label}
@@ -214,9 +215,11 @@ export function DownloadSheet({
                   <Pressable
                     key={q}
                     onPress={() => setQuality(q)}
-                    style={[styles.chip, active && styles.chipActive]}
+                    style={[styles.chip, active && sheetStyles.chipActive]}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{q}p</Text>
+                    <Text style={[styles.chipText, active && sheetStyles.chipTextActive]}>
+                      {q}p
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -231,10 +234,10 @@ export function DownloadSheet({
                     <Pressable
                       key={`${track.label}-${index}`}
                       onPress={() => setSubtitleIndex(index)}
-                      style={[styles.chip, active && styles.chipActive]}
+                      style={[styles.chip, active && sheetStyles.chipActive]}
                     >
                       <Text
-                        style={[styles.chipText, active && styles.chipTextActive]}
+                        style={[styles.chipText, active && sheetStyles.chipTextActive]}
                         numberOfLines={2}
                       >
                         {track.label}
@@ -255,7 +258,7 @@ export function DownloadSheet({
             ) : null}
 
             <Pressable
-              style={[styles.cta, starting && styles.ctaDisabled]}
+              style={[sheetStyles.cta, starting && sheetStyles.ctaDisabled]}
               disabled={starting || !selectedSubtitle}
               onPress={startDownload}
             >
@@ -264,7 +267,7 @@ export function DownloadSheet({
               ) : (
                 <>
                   <Ionicons name="download-outline" size={20} color={colors.black} />
-                  <Text style={styles.ctaText}>{t('common.download')}</Text>
+                  <Text style={sheetStyles.ctaText}>{t('common.download')}</Text>
                 </>
               )}
             </Pressable>
@@ -336,15 +339,6 @@ export function DownloadSheet({
 }
 
 const styles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 50,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.overlay,
-  },
   sheet: {
     maxHeight: '88%',
     backgroundColor: colors.bgElevated,
@@ -352,19 +346,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   title: {
     color: colors.text,
@@ -402,17 +383,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     maxWidth: '100%',
   },
-  chipActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
   chipText: {
     color: colors.textSecondary,
     fontFamily: fonts.medium,
     fontSize: 12,
-  },
-  chipTextActive: {
-    color: colors.accent,
   },
   subInfo: {
     flexDirection: 'row',
@@ -433,25 +407,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontFamily: fonts.regular,
     fontSize: 12,
-  },
-  cta: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  ctaDisabled: {
-    opacity: 0.7,
-  },
-  ctaText: {
-    color: colors.black,
-    fontFamily: fonts.bold,
-    fontSize: 16,
   },
   error: {
     color: colors.danger,

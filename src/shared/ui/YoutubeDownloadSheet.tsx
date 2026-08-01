@@ -25,6 +25,7 @@ import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { pickPreferredQuality } from '@/src/features/settings/pickPreferredQuality';
 import { useSettingsStore } from '@/src/features/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { sheetStyles } from '@/src/shared/ui/sheetStyles';
 
 type Props = {
   visible: boolean;
@@ -134,8 +135,8 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   };
 
   return (
-    <View style={styles.root} pointerEvents="box-none">
-      <Pressable style={styles.backdrop} onPress={onBackdropPress} />
+    <View style={sheetStyles.root} pointerEvents="box-none">
+      <Pressable style={sheetStyles.backdrop} onPress={onBackdropPress} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
@@ -151,8 +152,8 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
             },
           ]}
         >
-          <View style={styles.handle} />
-          <View style={styles.header}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.header}>
             <Text style={styles.title}>{t('youtube.title')}</Text>
             <Pressable onPress={resetAndClose} hitSlop={12}>
               <Ionicons name="close" size={24} color={colors.textMuted} />
@@ -184,7 +185,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.cta, !canProbe && styles.ctaDisabled]}
+                style={[sheetStyles.cta, !canProbe && sheetStyles.ctaDisabled]}
                 disabled={!canProbe}
                 onPress={() => void onProbe()}
               >
@@ -193,7 +194,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
                 ) : (
                   <>
                     <Ionicons name="logo-youtube" size={22} color={colors.black} />
-                    <Text style={styles.ctaText}>{t('youtube.chooseQuality')}</Text>
+                    <Text style={sheetStyles.ctaText}>{t('youtube.chooseQuality')}</Text>
                   </>
                 )}
               </Pressable>
@@ -213,9 +214,9 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
                     <Pressable
                       key={q.quality}
                       onPress={() => setQuality(q.quality)}
-                      style={[styles.chip, active && styles.chipActive]}
+                      style={[styles.chip, active && sheetStyles.chipActive]}
                     >
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      <Text style={[styles.chipText, active && sheetStyles.chipTextActive]}>
                         {q.label}
                       </Text>
                     </Pressable>
@@ -230,7 +231,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.cta, !canStart && styles.ctaDisabled]}
+                style={[sheetStyles.cta, !canStart && sheetStyles.ctaDisabled]}
                 disabled={!canStart}
                 onPress={() => void onStart()}
               >
@@ -239,7 +240,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
                 ) : (
                   <>
                     <Ionicons name="download-outline" size={22} color={colors.black} />
-                    <Text style={styles.ctaText}>{t('youtube.cta')}</Text>
+                    <Text style={sheetStyles.ctaText}>{t('youtube.cta')}</Text>
                   </>
                 )}
               </Pressable>
@@ -262,17 +263,8 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 50,
-    justifyContent: 'flex-end',
-  },
   avoid: {
     width: '100%',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.overlay,
   },
   sheet: {
     backgroundColor: colors.bgElevated,
@@ -281,19 +273,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     maxHeight: '85%',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   title: {
     color: colors.text,
@@ -353,42 +332,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  chipActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
   chipText: {
     color: colors.text,
     fontFamily: fonts.medium,
     fontSize: 14,
-  },
-  chipTextActive: {
-    color: colors.accent,
   },
   warn: {
     color: colors.textSecondary,
     fontFamily: fonts.regular,
     fontSize: 13,
     marginBottom: spacing.sm,
-  },
-  cta: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  ctaDisabled: {
-    opacity: 0.7,
-  },
-  ctaText: {
-    color: colors.black,
-    fontFamily: fonts.bold,
-    fontSize: 16,
   },
   backLink: {
     alignItems: 'center',
