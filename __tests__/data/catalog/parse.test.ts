@@ -385,6 +385,19 @@ describe('parseMovieDetail', () => {
     expect(detail.nativePlayer).toBe(false);
   });
 
+  it('prefers embess playerUrl and keeps fsst as soft fallback', () => {
+    const html = `
+      <meta property="og:title" content="Prada 2"/>
+      <iframe src="https://api.embess.ws/embed/movie/1"></iframe>
+      <iframe src="https://tv-1-kinoserial.net/embed/1"></iframe>
+      <iframe src="https://fsst.online/embed/1019620/"></iframe>
+    `;
+    const detail = parseMovieDetail(html, '/10759-prada.html');
+    expect(detail.nativePlayer).toBe(false);
+    expect(detail.playerUrl).toContain('embess.ws');
+    expect(detail.fallbackPlayerUrl).toContain('fsst.online');
+  });
+
   it('falls back to last bilingual segment when no year in parts', () => {
     const html = `
       <meta property="og:title" content="Русское / English Only"/>

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { isResolvableEmbedUrl, resolveEmbedStream } from '@/src/data/catalog/embedStreams';
 import type { StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { sheetStyles } from '@/src/shared/ui/sheetStyles';
@@ -32,6 +33,8 @@ type Props = {
   title: string;
   posterUrl?: string;
   playerUrl: string;
+  /** Pre-resolved streams (embess embed); skips bnsi StreamResolver when set. */
+  initialStream?: StreamPayload | null;
   season?: number;
   episode?: number;
 };
@@ -44,6 +47,7 @@ export function DownloadSheet({
   title,
   posterUrl,
   playerUrl,
+  initialStream,
   season,
   episode,
 }: Props) {
@@ -67,26 +71,72 @@ export function DownloadSheet({
   const selected = sources[audioIndex];
   const selectedSubtitle = tracks[subtitleIndex];
   const qualities = useMemo(() => qualityOptions(selected), [selected]);
+  const hasInitial = Boolean(initialStream?.hlsSource?.length);
 
-  const onResolved = useCallback((data: StreamPayload) => {
-    if (!data?.hlsSource?.length) {
-      setError(t('downloadSheet.emptyStreams'));
+  const applyPayload = useCallback(
+    (data: StreamPayload) => {
+      if (!data?.hlsSource?.length) {
+        setError(t('downloadSheet.emptyStreams'));
+        return;
+      }
+      setPayload(data);
+      setError(null);
+      const first = data.hlsSource[0];
+      const qs = qualityOptions(first);
+      setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
+      const trackList = data.tracks || [];
+      const preferred = pickSubtitleTrack(trackList);
+      if (preferred) {
+        const idx = trackList.findIndex(
+          (tr) => tr.src === preferred.src && tr.label === preferred.label
+        );
+        setSubtitleIndex(Math.max(0, idx));
+      }
+    },
+    [preferredDownloadQuality]
+  );
+
+  const onResolved = useCallback(
+    (data: StreamPayload) => {
+      applyPayload(data);
+    },
+    [applyPayload]
+  );
+
+  useEffect(() => {
+    if (!visible) {
+      setPayload(null);
+      setError(null);
+      setAudioIndex(0);
+      setSubtitleIndex(0);
       return;
     }
-    setPayload(data);
-    setError(null);
-    const first = data.hlsSource[0];
-    const qs = qualityOptions(first);
-    setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
-    const trackList = data.tracks || [];
-    const preferred = pickSubtitleTrack(trackList);
-    if (preferred) {
-      const idx = trackList.findIndex(
-        (tr) => tr.src === preferred.src && tr.label === preferred.label
-      );
-      setSubtitleIndex(Math.max(0, idx));
+    if (initialStream?.hlsSource?.length) {
+      applyPayload(initialStream);
+      return;
     }
-  }, [preferredDownloadQuality]);
+    if (isResolvableEmbedUrl(playerUrl)) {
+      let cancelled = false;
+      setPayload(null);
+      setError(null);
+      void (async () => {
+        try {
+          const data = await resolveEmbedStream(playerUrl);
+          /* istanbul ignore next -- sheet closed while resolving */
+          if (cancelled) return;
+          if (data?.hlsSource?.length) applyPayload(data);
+          else setError(t('downloadSheet.emptyStreams'));
+        } catch (e) {
+          /* istanbul ignore next -- sheet closed while resolving */
+          if (cancelled) return;
+          setError(errorMessage(e, t('downloadSheet.startFailed')));
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [visible, initialStream, playerUrl, applyPayload]);
 
   const doEnqueue = async () => {
     // startDownload / duplicate-other confirm only call this when tracks are selected.
@@ -109,6 +159,7 @@ export function DownloadSheet({
         subtitleLabel: subtitle.label,
         hlsUrl: pickPrimaryMediaUrl(hlsUrl),
         subtitleUrl: subtitle.src,
+        audioPlaylistUrl: audio.audioId,
         season,
         episode,
       });
@@ -160,8 +211,8 @@ export function DownloadSheet({
           {title}
         </Text>
 
-        {!error ? (
-          <View style={payload ? styles.hiddenPlayer : undefined}>
+        {!error && !payload && !hasInitial && !isResolvableEmbedUrl(playerUrl) ? (
+          <View style={styles.hiddenPlayer}>
             <StreamResolver
               key={playerUrl}
               playerUrl={playerUrl}
@@ -169,6 +220,12 @@ export function DownloadSheet({
               onResolved={onResolved}
               onError={(message) => setError(message)}
             />
+          </View>
+        ) : null}
+
+        {!error && !payload && isResolvableEmbedUrl(playerUrl) && !hasInitial ? (
+          <View style={styles.tracksLoading}>
+            <ActivityIndicator color={colors.accent} />
           </View>
         ) : null}
 
@@ -416,5 +473,10 @@ const styles = StyleSheet.create({
     height: 0,
     overflow: 'hidden',
     opacity: 0,
+  },
+  tracksLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
   },
 });

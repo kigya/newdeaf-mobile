@@ -112,6 +112,26 @@ describe('resolveVariantPlaylist', () => {
     expect(result.content).toContain('a.ts');
   });
 
+  it('skips failover AUDIO stream-inf lines', async () => {
+    (FileSystem.downloadAsync as jest.Mock)
+      .mockResolvedValueOnce({ status: 200 })
+      .mockResolvedValueOnce({ status: 200 });
+    (FileSystem.readAsStringAsync as jest.Mock)
+      .mockResolvedValueOnce(
+        [
+          '#EXTM3U',
+          '#EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=1280x720,AUDIO="failover-audio-0"',
+          'fail.m3u8',
+          '#EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=1280x720,AUDIO="audio0"',
+          'ok.m3u8',
+        ].join('\n')
+      )
+      .mockResolvedValueOnce('#EXTM3U\n#EXTINF:1,\na.ts\n');
+
+    const result = await resolveVariantPlaylist('https://cdn/master.m3u8', 720);
+    expect(result.url).toBe('https://cdn/ok.m3u8');
+  });
+
   it('prefers WebView text fetch when ready', async () => {
     (isMediaFetchReady as jest.Mock).mockReturnValue(true);
     (webViewFetchText as jest.Mock).mockResolvedValue('#EXTM3U\n#EXTINF:1,\ns.ts\n');
@@ -243,6 +263,80 @@ describe('downloadHlsToDirectory / downloadWithRetry', () => {
       expect.stringContaining('seg_00000.ts')
     );
     expect(onProgress).toHaveBeenCalledWith(1);
+  });
+
+  it('downloads demuxed video+audio and writes multi-rendition master', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('playlist-')) {
+        // master or media temp files — sequence: master first then audio
+        return '#EXTM3U\n#EXTINF:1,\nv0.ts\n';
+      }
+      return '#EXTM3U\n#EXTINF:1,\nv0.ts\n';
+    });
+    let playlistFetches = 0;
+    (FileSystem.downloadAsync as jest.Mock).mockImplementation(async (url: string, dest: string) => {
+      playlistFetches += 1;
+      const u = String(url);
+      if (u.includes('master') || u.includes('audio') || u.includes('index') || u.includes('.m3u8')) {
+        // Write content via readAsStringAsync mock path
+        return { status: 200, uri: dest };
+      }
+      return { status: 200, uri: dest };
+    });
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async () => {
+      // First resolveVariantPlaylist fetch (media playlist), then audio playlist
+      return '#EXTM3U\n#EXTINF:1,\nseg.ts\n';
+    });
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+
+    const result = await downloadHlsToDirectory(
+      'https://cdn/master.m3u8',
+      'file:///mock-docs/demux/',
+      720,
+      undefined,
+      'https://api.embess.ws/embed/1',
+      undefined,
+      {
+        audioPlaylistUrl: 'https://cdn/audio.m3u8',
+        audioLabel: 'MovieDalen',
+      }
+    );
+
+    expect(result.playlistPath).toBe('file:///mock-docs/demux/index.m3u8');
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      'file:///mock-docs/demux/video.m3u8',
+      expect.stringContaining('v_seg_')
+    );
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      'file:///mock-docs/demux/audio.m3u8',
+      expect.stringContaining('a_seg_')
+    );
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      'file:///mock-docs/demux/index.m3u8',
+      expect.stringContaining('NAME="MovieDalen"')
+    );
+    expect(playlistFetches).toBeGreaterThan(0);
+  });
+
+  it('demux master uses Audio default label when omitted', async () => {
+    (FileSystem.downloadAsync as jest.Mock).mockResolvedValue({ status: 200, uri: 'file://x' });
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('#EXTM3U\n#EXTINF:1,\nseg.ts\n');
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+
+    await downloadHlsToDirectory(
+      'https://cdn/index.m3u8',
+      'file:///mock-docs/demux2/',
+      720,
+      undefined,
+      'https://api.embess.ws/e',
+      undefined,
+      { audioPlaylistUrl: 'https://cdn/audio.m3u8' }
+    );
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      'file:///mock-docs/demux2/index.m3u8',
+      expect.stringContaining('NAME="Audio"')
+    );
   });
 
   it('uses WebView binary fetch when ready', async () => {

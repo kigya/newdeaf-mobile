@@ -8,6 +8,7 @@ import {
 } from '@/src/features/downloads/mediaFetch';
 import {
   base64DecodedLength,
+  buildDemuxMasterPlaylist,
   planHlsOfflineDownload,
   type ByteRange,
   type HlsDownloadJob,
@@ -306,6 +307,8 @@ export async function resolveVariantPlaylist(
     if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
     const next = lines[i + 1];
     if (!next || next.startsWith('#')) continue;
+    // Prefer primary AUDIO group over failover mirrors when heights match.
+    if (/AUDIO="[^"]*failover/i.test(line)) continue;
     const bandwidth = matchAttr(line, /BANDWIDTH=(\d+)/i);
     const height = matchAttr(line, /RESOLUTION=\d+x(\d+)/i);
     variants.push({ bandwidth, height, uri: pickPrimaryMediaUrl(resolveUrl(primary, next)) });
@@ -332,40 +335,23 @@ export type DownloadHlsResult = {
   playlistPath: string;
 };
 
-export async function downloadHlsToDirectory(
-  m3u8Url: string,
+export type DownloadHlsOptions = {
+  audioPlaylistUrl?: string;
+  audioLabel?: string;
+};
+
+async function materializePlaylistJobs(
+  jobs: HlsDownloadJob[],
   targetDir: string,
-  preferredHeight: number,
-  onProgress?: (progress: number) => void,
-  playerUrl?: string,
-  signal?: AbortSignal
-): Promise<DownloadHlsResult> {
-  const throwIfAborted = () => {
-    if (signal?.aborted) {
-      const err = new Error('Download cancelled');
-      err.name = 'AbortError';
-      throw err;
-    }
-  };
-  throwIfAborted();
-  await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
-
-  const headers = mediaSegmentHeaders(playerUrl);
-  const playlistHeaders = mediaRequestHeaders(playerUrl);
-  const { url: variantUrl, content } = await resolveVariantPlaylist(
-    m3u8Url,
-    preferredHeight,
-    playerUrl
-  );
-  throwIfAborted();
-  const { jobs, rewrittenLines: rewritten } = planHlsOfflineDownload(content, variantUrl);
-
-  const total = Math.max(jobs.length, 1);
-  let doneCount = 0;
-
-  // Skip segments already on disk (partial resume after interrupt).
-  // Batch getInfoAsync — sequential scans starve the JS thread on long movies.
-  // For ranged jobs, also require on-disk size to match the byte-range length.
+  headers: Record<string, string>,
+  playlistHeaders: Record<string, string>,
+  signal: AbortSignal | undefined,
+  throwIfAborted: () => void,
+  completedBefore: number,
+  totalUnits: number,
+  onUnitProgress?: (completedUnits: number, totalUnits: number) => void
+): Promise<number> {
+  let doneCount = completedBefore;
   const pending: HlsDownloadJob[] = [];
   const scanConcurrency = 16;
   for (let i = 0; i < jobs.length; i += scanConcurrency) {
@@ -386,10 +372,8 @@ export async function downloadHlsToDirectory(
       else pending.push(job);
     }
   }
-  onProgress?.(doneCount / (total + 1));
+  onUnitProgress?.(doneCount, Math.max(totalUnits, 1));
 
-  // WebView bridge is serial/heavy (chunked postMessage); keep concurrency low.
-  // OkHttp path can fan out more.
   const concurrency = isMediaFetchReady() ? 1 : 4;
   for (let i = 0; i < pending.length; i += concurrency) {
     throwIfAborted();
@@ -409,15 +393,104 @@ export async function downloadHlsToDirectory(
       })
     );
     doneCount += batch.length;
-    onProgress?.(Math.min(doneCount, jobs.length) / (total + 1));
+    onUnitProgress?.(Math.min(doneCount, totalUnits), Math.max(totalUnits, 1));
+  }
+  return doneCount;
+}
+
+export async function downloadHlsToDirectory(
+  m3u8Url: string,
+  targetDir: string,
+  preferredHeight: number,
+  onProgress?: (progress: number) => void,
+  playerUrl?: string,
+  signal?: AbortSignal,
+  options?: DownloadHlsOptions
+): Promise<DownloadHlsResult> {
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      const err = new Error('Download cancelled');
+      err.name = 'AbortError';
+      throw err;
+    }
+  };
+  throwIfAborted();
+  await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
+
+  const headers = mediaSegmentHeaders(playerUrl);
+  const playlistHeaders = mediaRequestHeaders(playerUrl);
+  const audioPlaylistUrl = options?.audioPlaylistUrl?.trim();
+  const demux = Boolean(audioPlaylistUrl);
+
+  const { url: variantUrl, content } = await resolveVariantPlaylist(
+    m3u8Url,
+    preferredHeight,
+    playerUrl
+  );
+  throwIfAborted();
+
+  const videoPlan = planHlsOfflineDownload(content, variantUrl, demux ? 'v_' : '');
+  let audioPlan: { jobs: HlsDownloadJob[]; rewrittenLines: string[] } | null = null;
+  if (demux && audioPlaylistUrl) {
+    const audioContent = await fetchText(audioPlaylistUrl, playerUrl);
+    throwIfAborted();
+    audioPlan = planHlsOfflineDownload(audioContent, audioPlaylistUrl, 'a_');
+  }
+
+  const allJobs = [...videoPlan.jobs, ...(audioPlan?.jobs ?? [])];
+  const total = Math.max(allJobs.length + 1, 1);
+  const report = (done: number) => onProgress?.(Math.min(done / total, 0.99));
+
+  let completed = await materializePlaylistJobs(
+    videoPlan.jobs,
+    targetDir,
+    headers,
+    playlistHeaders,
+    signal,
+    throwIfAborted,
+    0,
+    total,
+    report
+  );
+
+  if (audioPlan) {
+    completed = await materializePlaylistJobs(
+      audioPlan.jobs,
+      targetDir,
+      headers,
+      playlistHeaders,
+      signal,
+      throwIfAborted,
+      completed,
+      total,
+      report
+    );
   }
 
   throwIfAborted();
-  // targetDir is already a file:// URI from expo-file-system — keep relative names so
-  // the playlist stays portable next to the segments. BYTERANGE tags are stripped —
-  // each local file is already the exact slice.
+
+  if (demux && audioPlan) {
+    await FileSystem.writeAsStringAsync(
+      `${targetDir}video.m3u8`,
+      `${videoPlan.rewrittenLines.join('\n')}\n`
+    );
+    await FileSystem.writeAsStringAsync(
+      `${targetDir}audio.m3u8`,
+      `${audioPlan.rewrittenLines.join('\n')}\n`
+    );
+    const master = buildDemuxMasterPlaylist({
+      audioLabel: options?.audioLabel ? options.audioLabel : 'Audio',
+      videoPlaylistFile: 'video.m3u8',
+      audioPlaylistFile: 'audio.m3u8',
+    });
+    const playlistPath = `${targetDir}index.m3u8`;
+    await FileSystem.writeAsStringAsync(playlistPath, master);
+    onProgress?.(1);
+    return { dir: targetDir, playlistPath };
+  }
+
   const playlistPath = `${targetDir}index.m3u8`;
-  await FileSystem.writeAsStringAsync(playlistPath, `${rewritten.join('\n')}\n`);
+  await FileSystem.writeAsStringAsync(playlistPath, `${videoPlan.rewrittenLines.join('\n')}\n`);
   onProgress?.(1);
 
   return { dir: targetDir, playlistPath };

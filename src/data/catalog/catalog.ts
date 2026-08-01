@@ -143,3 +143,8 @@ export function getGenres(): Genre[] {
 }
 
 export { BASE_URL, parseMovieList };
+export {
+  isEmbessPlayerUrl,
+  isResolvableEmbedUrl,
+  resolveEmbedStream,
+} from './embedStreams';

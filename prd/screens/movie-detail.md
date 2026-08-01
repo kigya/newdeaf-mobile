@@ -42,8 +42,12 @@ Full title page: scraped metadata, optional TMDB (EN) + Kinopoisk enrichment, se
 
 ## Special: `nativePlayer === false`
 
-- Tracks unavailable; download disabled
 - Watch still uses embed URL in WebView
+- If player is **embess** (resolvable embed): scrape `makePlayer` + master HLS via `resolveEmbedStream` → show audio/sub chips; Download enabled with pre-resolved `StreamPayload`
+- If embess resolve fails and page has **fsst** sibling embed (`fallbackPlayerUrl`): soft-fallback to progressive MP4 qualities (Default audio; no rich dub/sub chips)
+- If player is another non-native embed without a resolvable URL: show `tracksUnavailable` / `downloadUnavailable`
+- Other third-party embeds (kodik, etc.): tracks unavailable; download disabled
+- Embess demuxed audio: download stores `audioId` (audio media playlist) and writes a local multi-rendition master
 
 ## States
 

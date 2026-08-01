@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { create } from 'zustand';
 
 import type { StreamPayload } from '@/src/data/catalog/types';
+import { isEmbessPlayerUrl } from '@/src/data/catalog/embedStreams';
 import { deleteDownloadRow, getDownload, listDownloads, upsertDownload } from './db';
 import {
   startDownloadForeground,
@@ -232,7 +233,11 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     patchItemInStore(current, id);
 
     const preferredHeight = Number(request.quality) || 720;
-    const { playlistPath, subtitlePath } = await withMediaFetchPlayer(request.playerUrl, async () => {
+    const hlsOptions = request.audioPlaylistUrl
+      ? { audioPlaylistUrl: request.audioPlaylistUrl, audioLabel: request.audioLabel }
+      : undefined;
+
+    const runHlsAndSubs = async () => {
       const { playlistPath: path } = await downloadHlsToDirectory(
         request.hlsUrl,
         baseDir,
@@ -248,7 +253,8 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
           void reporter.report(current);
         },
         request.playerUrl,
-        signal
+        signal,
+        hlsOptions
       );
 
       await reporter.flushPending();
@@ -259,9 +265,17 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       }
 
       const subs = `${baseDir}subs.vtt`;
-      await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
-      return { playlistPath: path, subtitlePath: subs };
-    });
+      if (request.subtitleUrl?.trim()) {
+        await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
+        return { playlistPath: path, subtitlePath: subs };
+      }
+      return { playlistPath: path, subtitlePath: undefined as string | undefined };
+    };
+
+    // Embess CDN accepts OkHttp with embess Referer — skip bnsi MediaFetch WebView.
+    const { playlistPath, subtitlePath } = isEmbessPlayerUrl(request.playerUrl)
+      ? await runHlsAndSubs()
+      : await withMediaFetchPlayer(request.playerUrl, runHlsAndSubs);
 
     if (signal.aborted) return;
     const stillExists = await getDownload(id);
@@ -614,8 +628,9 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     const tracks = payload.tracks ?? [];
     const subtitle =
       tracks.find((tr) => norm(tr.label) === norm(item.subtitleLabel)) ??
-      pickSubtitleTrack(tracks);
-    if (!subtitle?.src) {
+      pickSubtitleTrack(tracks) ??
+      tracks[0];
+    if (!subtitle) {
       throw new Error(t('store.retryNoStreams'));
     }
 
@@ -628,7 +643,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       quality: item.quality in audio.quality ? item.quality : Object.keys(audio.quality)[0],
       subtitleLabel: subtitle.label,
       hlsUrl: pickPrimaryMediaUrl(hlsUrl),
-      subtitleUrl: subtitle.src,
+      subtitleUrl: subtitle.src ? subtitle.src : '',
+      audioPlaylistUrl: audio.audioId ? audio.audioId : undefined,
       season: item.season,
       episode: item.episode,
     };

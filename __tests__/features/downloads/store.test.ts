@@ -34,6 +34,10 @@ jest.mock('@/src/features/downloads/youtube', () => ({
   extractYoutubeVideoId: jest.fn(() => 'dQw4w9WgXcQ'),
 }));
 
+jest.mock('@/src/data/catalog/embedStreams', () => ({
+  isEmbessPlayerUrl: (url: string) => /embess\.ws/i.test(url),
+}));
+
 import {
   deleteDownloadRow,
   getDownload,
@@ -335,15 +339,59 @@ describe('downloads store enqueue / retry', () => {
 
     await useDownloadsStore.getState().completeMovieRetry('m2', {
       hlsSource: [
-        { label: 'RU', quality: { '720': 'https://hls/720.m3u8', '480': 'https://hls/480.m3u8' } },
+        {
+          label: 'RU',
+          quality: { '720': 'https://hls/720.m3u8', '480': 'https://hls/480.m3u8' },
+          audioId: 'https://hls/audio.m3u8',
+        },
       ],
       tracks: [{ label: 'Subs', src: 'https://subs.vtt' }],
     } as never);
 
     await new Promise((r) => setTimeout(r, 40));
-    expect(downloadHlsToDirectory).toHaveBeenCalled();
+    expect(downloadHlsToDirectory).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Number),
+      expect.any(Function),
+      expect.any(String),
+      expect.any(Object),
+      expect.objectContaining({ audioPlaylistUrl: 'https://hls/audio.m3u8' })
+    );
     expect(useDownloadsStore.getState().items.find((i) => i.id === 'm2')?.status).toBe(
       'completed'
+    );
+  });
+
+  it('completeMovieRetry tolerates empty subtitle src and missing audioId', async () => {
+    const item = baseRecord({
+      id: 'm2b',
+      status: 'resolving',
+      audioLabel: 'RU',
+      subtitleLabel: 'Subs',
+      quality: '720',
+      videoDir: 'file:///mock-docs/downloads/m2b/',
+      subtitleUrl: '',
+    });
+    (getDownload as jest.Mock).mockImplementation(async (id: string) => {
+      return useDownloadsStore.getState().items.find((i) => i.id === id) ?? item;
+    });
+    useDownloadsStore.setState({ items: [item], hydrated: true });
+
+    await useDownloadsStore.getState().completeMovieRetry('m2b', {
+      hlsSource: [{ label: 'RU', quality: { '720': 'https://hls/720.m3u8' } }],
+      tracks: [{ label: 'Subs', src: '' }],
+    } as never);
+
+    await new Promise((r) => setTimeout(r, 40));
+    expect(downloadHlsToDirectory).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Number),
+      expect.any(Function),
+      expect.any(String),
+      expect.any(Object),
+      undefined
     );
   });
 
@@ -1310,8 +1358,39 @@ describe('downloads store enqueue / retry', () => {
       720,
       expect.any(Function),
       'https://player',
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
+  });
+
+  it('embess player skips MediaFetch and passes audioPlaylistUrl', async () => {
+    (getDownload as jest.Mock).mockImplementation(async (id: string) =>
+      useDownloadsStore.getState().items.find((i) => i.id === id)
+    );
+    (withMediaFetchPlayer as jest.Mock).mockClear();
+    await useDownloadsStore.getState().enqueue({
+      movieId: 'emb1',
+      title: 'Embess',
+      playerUrl: 'https://api.embess.ws/embed/1',
+      audioLabel: 'MovieDalen',
+      quality: '720',
+      subtitleLabel: '—',
+      hlsUrl: 'https://cdn/master.m3u8',
+      subtitleUrl: '',
+      audioPlaylistUrl: 'https://cdn/a1.m3u8',
+    });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(withMediaFetchPlayer).not.toHaveBeenCalled();
+    expect(downloadHlsToDirectory).toHaveBeenCalledWith(
+      'https://cdn/master.m3u8',
+      expect.any(String),
+      720,
+      expect.any(Function),
+      'https://api.embess.ws/embed/1',
+      expect.any(Object),
+      { audioPlaylistUrl: 'https://cdn/a1.m3u8', audioLabel: 'MovieDalen' }
+    );
+    expect(downloadTextFile).not.toHaveBeenCalled();
   });
 
   it('youtube prior missing returns early', async () => {
