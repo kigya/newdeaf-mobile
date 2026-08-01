@@ -122,7 +122,8 @@ export function handleMediaFetchMessage(msg: {
   }
 
   if (!entry.chunks) {
-    entry.chunks = new Array(count);
+    // Pre-fill so Array#every does not skip empty holes before later chunks arrive.
+    entry.chunks = Array.from({ length: count }, () => undefined);
     entry.status = msg.status ?? 0;
     entry.encoding = msg.encoding;
     entry.contentLength = msg.contentLength;

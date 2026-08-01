@@ -35,3 +35,118 @@ jest.mock('react-native-background-actions', () => ({
     updateNotification: jest.fn(async () => undefined),
   },
 }));
+
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    canGoBack: jest.fn(() => true),
+  })),
+  useLocalSearchParams: jest.fn(() => ({})),
+  Stack: {
+    Screen: jest.fn(() => null),
+  },
+  Link: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  router: {
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+  },
+}));
+
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  return {
+    SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
+    SafeAreaView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, props, children),
+    useSafeAreaInsets: () => insets,
+    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+  };
+});
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    expoConfig: { version: '1.0.0' },
+    nativeApplicationVersion: '1.0.0',
+  },
+}));
+
+jest.mock('moti', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    MotiView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, props, children),
+    MotiText: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, props, children),
+  };
+});
+
+jest.mock('expo-image', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    Image: ({ ...props }: Record<string, unknown>) =>
+      React.createElement(View, { ...props, testID: props.testID ?? 'expo-image' }),
+  };
+});
+
+jest.mock('expo-status-bar', () => ({
+  StatusBar: () => null,
+}));
+
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const Icon = ({ name }: { name?: string }) =>
+    React.createElement(Text, { testID: `icon-${name ?? 'unknown'}` }, name ?? '');
+  return {
+    Ionicons: Icon,
+    MaterialIcons: Icon,
+    FontAwesome: Icon,
+  };
+});
+
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Animated = {
+    View: View,
+    createAnimatedComponent: (Component: unknown) => Component,
+    call: () => {},
+  };
+  return {
+    __esModule: true,
+    default: Animated,
+    FadeOut: { duration: () => ({}) },
+    FadeIn: { duration: () => ({}) },
+    LinearTransition: {},
+    useSharedValue: (v: unknown) => ({ value: v }),
+    useAnimatedStyle: () => ({}),
+    withTiming: (v: unknown) => v,
+    withSpring: (v: unknown) => v,
+    Easing: { linear: jest.fn(), ease: jest.fn() },
+    runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
+    runOnUI: (fn: (...args: unknown[]) => unknown) => fn,
+  };
+});
