@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cueAtTime, parseVtt, type VttCue } from '@/src/offline/vtt';
+import { ensureFileUri } from '@/src/offline/prepareLocalSource';
 import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 
@@ -33,6 +34,8 @@ type Props = {
   onClose?: () => void;
   /** Extra overlay (e.g. track chips). */
   children?: ReactNode;
+  /** Offline / local playback — enable background audio + auto PiP. */
+  enableBackgroundPlayback?: boolean;
 };
 
 function buildSource(
@@ -40,8 +43,9 @@ function buildSource(
   contentType: 'hls' | 'progressive',
   headers?: Record<string, string>
 ): VideoSource {
+  const normalized = uri.startsWith('file:') || uri.startsWith('http') ? uri : ensureFileUri(uri);
   return {
-    uri,
+    uri: normalized,
     contentType: contentType === 'progressive' ? 'progressive' : 'hls',
     ...(headers ? { headers } : {}),
   };
@@ -58,11 +62,13 @@ export function MediaPlayer({
   onProgress,
   onClose,
   children,
+  enableBackgroundPlayback = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [cues, setCues] = useState<VttCue[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [subsEnabled, setSubsEnabled] = useState(true);
+  const [playerError, setPlayerError] = useState<string | null>(null);
   const hasSubs = !!(subtitlePath || subtitleUri);
   const initialSeekDoneRef = useRef(false);
   const lastProgressAtRef = useRef(0);
@@ -70,13 +76,23 @@ export function MediaPlayer({
   onProgressRef.current = onProgress;
   const preservePositionRef = useRef<number | null>(null);
   const uriRef = useRef(uri);
+  const wantPlayingRef = useRef(true);
 
   const initialSourceRef = useRef(buildSource(uri, contentType, headers));
   const player = useVideoPlayer(initialSourceRef.current, (p) => {
     p.loop = false;
     p.timeUpdateEventInterval = 0.25;
+    p.staysActiveInBackground = enableBackgroundPlayback;
     p.play();
   });
+
+  useEffect(() => {
+    try {
+      player.staysActiveInBackground = enableBackgroundPlayback;
+    } catch {
+      // ignore
+    }
+  }, [player, enableBackgroundPlayback]);
 
   useEffect(() => {
     // Debug aid for CDN header / URL issues on device.
@@ -100,7 +116,9 @@ export function MediaPlayer({
     const next = buildSource(uri, contentType, headers);
     void (async () => {
       try {
+        setPlayerError(null);
         await player.replaceAsync(next);
+        wantPlayingRef.current = true;
         player.play();
         const target = preservePositionRef.current ?? 0;
         preservePositionRef.current = null;
@@ -124,8 +142,9 @@ export function MediaPlayer({
             setTimeout(() => clearInterval(id), 5000);
           }
         }
-      } catch {
+      } catch (e) {
         preservePositionRef.current = null;
+        setPlayerError(e instanceof Error ? e.message : t('offline.playbackError'));
       }
     })();
   }, [uri, contentType, headers, player]);
@@ -149,6 +168,55 @@ export function MediaPlayer({
   useEventListener(player, 'timeUpdate', ({ currentTime: time }) => {
     setCurrentTime(time);
     reportProgress(time);
+  });
+
+  useEventListener(player, 'statusChange', ({ status, error }) => {
+    if (status === 'error') {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: string }).message ?? t('offline.playbackError'))
+          : t('offline.playbackError');
+      setPlayerError(message);
+      if (__DEV__) {
+        console.warn('[MediaPlayer] status error', error);
+      }
+      return;
+    }
+    if (status === 'readyToPlay' && wantPlayingRef.current) {
+      setPlayerError(null);
+      try {
+        player.play();
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    if (isPlaying) {
+      wantPlayingRef.current = true;
+      return;
+    }
+    // Stall recovery: local HLS sometimes stops after the first ~1s segment.
+    // Do not fight intentional pauses later in the video.
+    try {
+      const time = typeof player.currentTime === 'number' ? player.currentTime : 0;
+      if (wantPlayingRef.current && time > 0 && time < 3) {
+        setTimeout(() => {
+          try {
+            if (wantPlayingRef.current && !player.playing && (player.currentTime ?? 0) < 3) {
+              player.play();
+            }
+          } catch {
+            // ignore
+          }
+        }, 350);
+      } else if (time >= 3) {
+        wantPlayingRef.current = false;
+      }
+    } catch {
+      // ignore
+    }
   });
 
   useEffect(() => {
@@ -179,6 +247,8 @@ export function MediaPlayer({
         if (typeof duration === 'number' && duration > 0) {
           const target = Math.min(initialPositionSec, Math.max(0, duration - 1));
           player.currentTime = target;
+          wantPlayingRef.current = true;
+          player.play();
           initialSeekDoneRef.current = true;
           clearInterval(id);
         }
@@ -191,6 +261,7 @@ export function MediaPlayer({
       if (!initialSeekDoneRef.current) {
         try {
           player.currentTime = initialPositionSec;
+          player.play();
         } catch {
           // ignore
         }
@@ -205,6 +276,7 @@ export function MediaPlayer({
 
   useEffect(() => {
     return () => {
+      wantPlayingRef.current = false;
       try {
         const time = player.currentTime;
         if (typeof time === 'number' && !Number.isNaN(time)) {
@@ -249,6 +321,7 @@ export function MediaPlayer({
   );
 
   const handleClose = () => {
+    wantPlayingRef.current = false;
     try {
       const time = player.currentTime;
       if (typeof time === 'number' && !Number.isNaN(time)) {
@@ -269,6 +342,7 @@ export function MediaPlayer({
         surfaceType="textureView"
         nativeControls
         allowsPictureInPicture
+        startsPictureInPictureAutomatically={enableBackgroundPlayback}
         fullscreenOptions={{ enable: true }}
       />
 
@@ -299,6 +373,12 @@ export function MediaPlayer({
       </View>
 
       {children}
+
+      {playerError ? (
+        <View style={styles.errorBanner} pointerEvents="none">
+          <Text style={styles.errorText}>{playerError}</Text>
+        </View>
+      ) : null}
 
       {!uri ? (
         <View style={styles.loader}>
@@ -366,5 +446,20 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorBanner: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 96,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    padding: spacing.md,
+    borderRadius: 8,
+  },
+  errorText: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

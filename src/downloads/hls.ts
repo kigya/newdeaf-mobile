@@ -375,6 +375,9 @@ export async function downloadHlsToDirectory(
 
   // targetDir is already a file:// URI from expo-file-system — keep relative names so
   // the playlist stays portable next to the segments.
+  if (!rewritten.some((l) => l.trim() === '#EXT-X-ENDLIST')) {
+    rewritten.push('#EXT-X-ENDLIST');
+  }
   const playlistPath = `${targetDir}index.m3u8`;
   await FileSystem.writeAsStringAsync(playlistPath, `${rewritten.join('\n')}\n`);
   onProgress?.(1);

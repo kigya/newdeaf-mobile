@@ -28,6 +28,11 @@ export type WatchProgressUpsert = {
   isSeries?: boolean;
   source: WatchProgressSource;
   downloadId?: string;
+  /**
+   * Optional client generation for racing async writes.
+   * Higher generation always wins; same/missing falls through to normal upsert.
+   */
+  saveGeneration?: number;
 };
 
 /** Min position to offer resume (seconds). */
@@ -38,6 +43,16 @@ export const RESUME_COMPLETE_RATIO = 0.9;
 
 /** Treat as finished when remaining time is below this (seconds). */
 export const RESUME_COMPLETE_REMAINING_SEC = 120;
+
+/**
+ * Only apply the “near end” remaining-time rule when duration looks like a
+ * real feature-length title. Short/wrong WebView durations otherwise wipe
+ * mid-watch progress (e.g. duration≈buffer length).
+ */
+export const RESUME_COMPLETE_MIN_DURATION_SEC = 15 * 60;
+
+/** Reject incomplete HTML5 duration metadata near current position. */
+export const DURATION_METADATA_SLACK_SEC = 5;
 
 export function makeProgressId(
   movieId: string,
@@ -91,8 +106,30 @@ export function isWatchCompleted(record: {
   durationSec?: number;
 }): boolean {
   const duration = record.durationSec;
-  if (duration == null || duration <= 0) return false;
+  if (duration == null || duration <= 0 || !Number.isFinite(duration)) return false;
   if (record.positionSec / duration >= RESUME_COMPLETE_RATIO) return true;
-  if (duration - record.positionSec < RESUME_COMPLETE_REMAINING_SEC) return true;
+  if (
+    duration >= RESUME_COMPLETE_MIN_DURATION_SEC &&
+    duration - record.positionSec < RESUME_COMPLETE_REMAINING_SEC
+  ) {
+    return true;
+  }
   return false;
+}
+
+/** Drop incomplete / suspicious duration values from the player before upsert. */
+export function sanitizeDurationSec(
+  positionSec: number,
+  durationSec?: number
+): number | undefined {
+  if (durationSec == null || !Number.isFinite(durationSec) || durationSec <= 0) {
+    return undefined;
+  }
+  if (durationSec <= positionSec + DURATION_METADATA_SLACK_SEC) {
+    return undefined;
+  }
+  if (durationSec < RESUME_MIN_POSITION_SEC * 10) {
+    return undefined;
+  }
+  return durationSec;
 }

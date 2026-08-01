@@ -18,6 +18,8 @@ import {
 type WatchProgressState = {
   items: WatchProgressRecord[];
   hydrated: boolean;
+  /** Highest saveGeneration accepted per progress id (in-memory only). */
+  saveGenerations: Record<string, number>;
   hydrate: () => Promise<void>;
   get: (movieId: string, season?: number, episode?: number) => WatchProgressRecord | undefined;
   getLatestForMovie: (movieId: string) => WatchProgressRecord | undefined;
@@ -38,6 +40,7 @@ function replaceItem(
 export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
   items: [],
   hydrated: false,
+  saveGenerations: {},
 
   hydrate: async () => {
     const items = await listWatchProgress();
@@ -53,14 +56,38 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
     get().items.find((item) => item.movieId === movieId),
 
   upsert: async (input) => {
-    if (isWatchCompleted(input)) {
-      const id = makeProgressId(input.movieId, input.season, input.episode);
+    const id = makeProgressId(input.movieId, input.season, input.episode);
+    const gen = input.saveGeneration;
+    if (gen != null) {
+      const prev = get().saveGenerations[id] ?? 0;
+      if (gen < prev) {
+        // Stale async write — do not overwrite a newer in-session save.
+        return get().items.find((item) => item.id === id) ?? null;
+      }
+      set({ saveGenerations: { ...get().saveGenerations, [id]: gen } });
+    }
+
+    const { saveGeneration: _gen, ...persist } = input;
+
+    if (isWatchCompleted(persist)) {
       await deleteWatchProgress(id);
-      set({ items: get().items.filter((item) => item.id !== id) });
+      const nextGens = { ...get().saveGenerations };
+      delete nextGens[id];
+      set({
+        items: get().items.filter((item) => item.id !== id),
+        saveGenerations: nextGens,
+      });
       return null;
     }
 
-    const record = await upsertWatchProgress(input);
+    const record = await upsertWatchProgress(persist);
+    // Re-check generation after await — a newer save may have started.
+    if (gen != null) {
+      const latest = get().saveGenerations[id] ?? 0;
+      if (gen < latest) {
+        return get().items.find((item) => item.id === id) ?? record;
+      }
+    }
     set({ items: replaceItem(get().items, record) });
     return record;
   },
@@ -68,12 +95,22 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
   clear: async (movieId, season, episode) => {
     const id = makeProgressId(movieId, season, episode);
     await deleteWatchProgressForEpisode(movieId, season, episode);
-    set({ items: get().items.filter((item) => item.id !== id) });
+    const nextGens = { ...get().saveGenerations };
+    delete nextGens[id];
+    set({
+      items: get().items.filter((item) => item.id !== id),
+      saveGenerations: nextGens,
+    });
   },
 
   clearById: async (id) => {
     await deleteWatchProgress(id);
-    set({ items: get().items.filter((item) => item.id !== id) });
+    const nextGens = { ...get().saveGenerations };
+    delete nextGens[id];
+    set({
+      items: get().items.filter((item) => item.id !== id),
+      saveGenerations: nextGens,
+    });
   },
 }));
 

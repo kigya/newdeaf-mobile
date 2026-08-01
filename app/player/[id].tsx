@@ -9,8 +9,9 @@ import { PlayerWebView } from '@/src/player/PlayerWebView';
 import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 import { useWatchProgressStore } from '@/src/watch-progress/store';
+import { sanitizeDurationSec } from '@/src/watch-progress/types';
 
-const PROGRESS_THROTTLE_MS = 5000;
+const PROGRESS_THROTTLE_MS = 2000;
 
 function parseOptionalInt(value?: string): number | undefined {
   if (value == null || value === '') return undefined;
@@ -50,9 +51,12 @@ export default function OnlinePlayerScreen() {
   const startTime = parseOptionalInt(startTimeParam) ?? 0;
   const resolvedMovieId = movieId || undefined;
 
+  /** Last position reported by the WebView hook (seek-aware). */
   const lastPositionRef = useRef(startTime > 0 ? startTime : 0);
   const lastDurationRef = useRef<number | undefined>(undefined);
   const lastProgressAtRef = useRef(0);
+  /** Monotonic save generation — older async upserts must not win. */
+  const saveGenRef = useRef(0);
   const metaRef = useRef({
     movieId: resolvedMovieId,
     title: title ?? t('common.player'),
@@ -80,17 +84,23 @@ export default function OnlinePlayerScreen() {
       if (!force && now - lastProgressAtRef.current < PROGRESS_THROTTLE_MS) return;
       lastProgressAtRef.current = now;
       const position = Math.max(0, positionSec);
+      const safeDuration = sanitizeDurationSec(position, durationSec);
+      if (safeDuration != null) {
+        lastDurationRef.current = safeDuration;
+      }
+      const gen = ++saveGenRef.current;
       void upsertProgress({
         movieId: meta.movieId,
         season: meta.isSeries ? meta.season : undefined,
         episode: meta.isSeries ? meta.episode : undefined,
         positionSec: position,
-        durationSec,
+        durationSec: safeDuration ?? lastDurationRef.current,
         title: meta.title,
         posterUrl: meta.posterUrl,
         href: meta.href,
         isSeries: meta.isSeries,
         source: 'online',
+        saveGeneration: gen,
       });
     },
     [upsertProgress]
@@ -98,18 +108,17 @@ export default function OnlinePlayerScreen() {
 
   const onProgress = useCallback(
     (payload: { currentTime: number; duration?: number }) => {
+      // Last WebView report always wins for in-memory position (supports seek back/forward).
       lastPositionRef.current = payload.currentTime;
-      if (payload.duration != null) lastDurationRef.current = payload.duration;
+      const safe = sanitizeDurationSec(payload.currentTime, payload.duration);
+      if (safe != null) lastDurationRef.current = safe;
       saveProgress(payload.currentTime, payload.duration);
     },
     [saveProgress]
   );
 
-  // Seed progress when opening (episode/title) even if time hook never fires.
-  useEffect(() => {
-    if (!resolvedMovieId) return;
-    saveProgress(lastPositionRef.current, lastDurationRef.current, true);
-  }, [resolvedMovieId, saveProgress]);
+  // Do NOT seed DB on mount with startTime — that races later seek progress and can
+  // overwrite a newer position with the old resume point.
 
   useEffect(() => {
     return () => {
@@ -151,22 +160,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.black,
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-  },
   top: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   back: {
     width: 40,
@@ -178,10 +179,18 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.white,
     fontFamily: fonts.semiBold,
-    fontSize: 15,
+    fontSize: 16,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.black,
+    padding: spacing.lg,
   },
   error: {
     color: colors.danger,
     fontFamily: fonts.medium,
+    textAlign: 'center',
   },
 });
