@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: NewDeaf
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - name: kigya
+    email: kirillborichevskiy@gmail.com
+    website: https://github.com/kigya
+repository-code: https://github.com/kigya/newdeaf-mobile
+url: https://github.com/kigya/newdeaf-mobile
+abstract: >-
+  Android-first Expo / React Native client for newdeaf.top — catalog, search,
+  online WebView playback, offline downloads, favorites, and watch progress.
+keywords:
+  - react-native
+  - expo
+  - android
+  - offline-playback
+  - movies
+license: LicenseRef-Attribution-License
+version: 1.0.0
+date-released: "2026-08-01"

@@ -2,6 +2,16 @@
   "name": "newdeaf",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "license": "LicenseRef-Attribution-License",
+  "author": {
+    "name": "kigya",
+    "email": "kirillborichevskiy@gmail.com",
+    "url": "https://github.com/kigya"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kigya/newdeaf-mobile.git"
+  },
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
