@@ -103,7 +103,8 @@ export function encodeWin1251(str: string): Uint8Array {
   const out = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) {
     const code = str.charCodeAt(i);
-    out[i] = UNICODE_TO_WIN1251.get(code) ?? (code < 128 ? code : 0x3f);
+    // Reverse map always contains ASCII 0–127; unknown code points → '?'.
+    out[i] = UNICODE_TO_WIN1251.get(code) ?? 0x3f;
   }
   return out;
 }

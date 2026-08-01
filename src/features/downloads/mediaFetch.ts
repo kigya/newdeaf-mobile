@@ -139,7 +139,7 @@ export function handleMediaFetchMessage(msg: {
     pending.delete(msg.id);
     clearTimeout(entry.timer);
     entry.resolve({
-      status: entry.status ?? msg.status ?? 0,
+      status: entry.status!,
       body: entry.chunks.join(''),
       encoding: entry.encoding ?? msg.encoding,
       contentLength: entry.contentLength ?? msg.contentLength,
@@ -149,7 +149,7 @@ export function handleMediaFetchMessage(msg: {
   return true;
 }
 
-function waitUntilReady(timeoutMs: number, expectedUrl?: string): Promise<void> {
+export function waitUntilReady(timeoutMs: number, expectedUrl?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const ok = () => {
       const state = useMediaFetchStore.getState();
@@ -188,7 +188,7 @@ function requestFetch(
     const entry: Pending = {
       resolve,
       reject,
-      timer: setTimeout(() => undefined, 0),
+      timer: 0 as unknown as ReturnType<typeof setTimeout>,
       timeoutMs,
     };
     pending.set(id, entry);

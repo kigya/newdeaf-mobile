@@ -76,8 +76,8 @@ function scoreMatch(
   const want = normalizeTitle(titleForSearch(title));
   let score = 0;
   if (candTitle === want || candEn === want) score += 100;
-  else if (candTitle.includes(want) || want.includes(candTitle)) score += 40;
-  else if (candEn.includes(want) || want.includes(candEn)) score += 35;
+  else if (candTitle && (candTitle.includes(want) || want.includes(candTitle))) score += 40;
+  else if (candEn && (candEn.includes(want) || want.includes(candEn))) score += 35;
   else return -1;
 
   if (year) {
@@ -98,9 +98,6 @@ function scoreMatch(
 }
 
 async function kpFetch<T>(pathAndQuery: string): Promise<T> {
-  if (!API_KEY) {
-    throw new Error('Kinopoisk key missing');
-  }
   const res = await fetch(`${KP_API}${pathAndQuery}`, {
     headers: {
       Accept: 'application/json',
@@ -134,7 +131,7 @@ async function resolveKinopoiskId(input: {
   year?: string;
   isSeries?: boolean;
 }): Promise<number | null> {
-  const query = titleForSearch((input.originalTitle || input.title).trim());
+  const query = titleForSearch(input.title.trim());
   const key = `${normalizeTitle(query)}|${input.year ?? ''}|${input.isSeries ? 's' : 'm'}`;
   if (idCache.has(key)) {
     return idCache.get(key) ?? null;

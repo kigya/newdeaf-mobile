@@ -90,8 +90,8 @@ type TmdbAltTitles = {
   titles?: { iso_3166_1?: string; title?: string; type?: string }[];
 };
 
-function cacheKey(title: string, year?: string, locale?: string): string {
-  return `${locale ?? tmdbLanguage()}|${normalizeTitle(title)}|${year ?? ''}`;
+function cacheKey(title: string, year: string | undefined, locale: string): string {
+  return `${locale}|${normalizeTitle(title)}|${year ?? ''}`;
 }
 
 function scoreMatch(candidate: TmdbSearchResult, title: string, year?: string): number {
@@ -100,8 +100,8 @@ function scoreMatch(candidate: TmdbSearchResult, title: string, year?: string): 
   const want = normalizeTitle(title);
   let score = 0;
   if (candTitle === want || candOriginal === want) score += 100;
-  else if (candTitle.includes(want) || want.includes(candTitle)) score += 40;
-  else if (candOriginal.includes(want) || want.includes(candOriginal)) score += 35;
+  else if (candTitle && (candTitle.includes(want) || want.includes(candTitle))) score += 40;
+  else if (candOriginal && (candOriginal.includes(want) || want.includes(candOriginal))) score += 35;
   else return -1;
 
   if (year) {
@@ -286,18 +286,21 @@ export async function resolveRussianTitleForSearch(query: string): Promise<strin
     }
     const mediaType: 'movie' | 'tv' = best.media_type === 'tv' ? 'tv' : 'movie';
     const russianTitle = await fetchRussianTitle(best.id, mediaType);
-    const fallbackTitle = (best.original_title || best.original_name || best.title || best.name || '').trim();
-    const resolved = russianTitle || fallbackTitle || null;
-    if (resolved) {
-      memoryCache.set(key, {
-        tmdbId: best.id,
-        title: resolved,
-        russianTitle: resolved,
-        actors: [],
-      });
-    } else {
-      memoryCache.set(key, null);
+    let fallbackTitle = trimmed;
+    for (const s of [best.original_title, best.original_name, best.title, best.name]) {
+      const t = (s ?? '').trim();
+      if (t) {
+        fallbackTitle = t;
+        break;
+      }
     }
+    const resolved = (russianTitle && russianTitle.trim()) || fallbackTitle;
+    memoryCache.set(key, {
+      tmdbId: best.id,
+      title: resolved,
+      russianTitle: russianTitle || undefined,
+      actors: [],
+    });
     return resolved;
   } catch {
     // Transient — allow retry on next search.

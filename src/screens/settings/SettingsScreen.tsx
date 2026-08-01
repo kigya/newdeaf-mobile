@@ -45,7 +45,7 @@ function LanguageSwitcher({
   const isRu = locale === 'ru';
 
   return (
-    <View style={styles.switchTrack} onLayout={onLayout}>
+    <View style={styles.switchTrack} onLayout={onLayout} testID="language-switch">
       {pillWidth > 0 ? (
         <MotiView
           animate={{ translateX: isRu ? 4 : 4 + pillWidth }}

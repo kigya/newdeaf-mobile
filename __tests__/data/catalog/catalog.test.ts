@@ -51,7 +51,7 @@ describe('catalog api', () => {
     (fetchHtml as jest.Mock).mockResolvedValue('<html/>');
     (parseCatalogPage as jest.Mock).mockReturnValue({ items: [], hasMore: false });
 
-    await fetchHomeMovies(1);
+    await fetchHomeMovies();
     expect(fetchHtml).toHaveBeenCalledWith('/');
     expect(parseCatalogPage).toHaveBeenCalledWith('<html/>', 1);
 
@@ -63,7 +63,7 @@ describe('catalog api', () => {
     (fetchHtml as jest.Mock).mockResolvedValue('g');
     (parseCatalogPage as jest.Mock).mockReturnValue({ items: [{ id: '1' }], hasMore: true });
 
-    await fetchGenreMovies('/genre/action', 1);
+    await fetchGenreMovies('/genre/action');
     expect(fetchHtml).toHaveBeenCalledWith('/genre/action/');
 
     await fetchGenreMovies('/genre/action/', 2);
@@ -113,7 +113,26 @@ describe('catalog api', () => {
     expect(fetchHtml).toHaveBeenCalled();
   });
 
-  it('fetchMovieDetail handles html path, relative path, and numeric newsid', async () => {
+  it('searchMovies skips bridge for Cyrillic on ru locale', async () => {
+    (getLocale as jest.Mock).mockReturnValue('ru');
+    (fetchHtml as jest.Mock).mockResolvedValue('ok');
+    (parseSearchResults as jest.Mock).mockReturnValue([{ id: '1' }]);
+    await searchMovies('Матрица');
+    expect(resolveRussianTitleForSearch).not.toHaveBeenCalled();
+  });
+
+  it('searchMovies keeps bridge result when fallback HTML is min-length error', async () => {
+    (resolveRussianTitleForSearch as jest.Mock).mockResolvedValue('Мост');
+    (fetchHtml as jest.Mock)
+      .mockResolvedValueOnce('empty-bridge')
+      .mockResolvedValueOnce('поиск менее 4 символов');
+    (parseSearchResults as jest.Mock).mockReturnValueOnce([]);
+
+    const results = await searchMovies('Matrix');
+    expect(results).toEqual([]);
+  });
+
+  it('fetchMovieDetail handles html path, relative path, newsid query, and numeric newsid', async () => {
     (fetchHtml as jest.Mock).mockResolvedValue('html');
     (parseMovieDetail as jest.Mock).mockReturnValue({ id: '1', title: 'T' });
 
@@ -123,11 +142,15 @@ describe('catalog api', () => {
     await fetchMovieDetail('film.html');
     expect(fetchHtml).toHaveBeenCalledWith('/film.html');
 
+    await fetchMovieDetail('index.php?newsid=99');
+    expect(fetchHtml).toHaveBeenCalledWith('/index.php?newsid=99');
+
     await fetchMovieDetail('12345');
     expect(fetchHtml).toHaveBeenCalledWith('/www/index.php?newsid=12345');
   });
 
   it('fetchPlayerFileList returns parsed list or null', async () => {
+    jest.useFakeTimers();
     const fetchMock = jest.spyOn(global, 'fetch' as never) as jest.Mock;
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -142,7 +165,20 @@ describe('catalog api', () => {
     fetchMock.mockRejectedValueOnce(new Error('net'));
     expect(await fetchPlayerFileList('https://player/x')).toBeNull();
 
+    fetchMock.mockImplementationOnce(
+      (_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          });
+        })
+    );
+    const pending = fetchPlayerFileList('https://player/slow');
+    await jest.advanceTimersByTimeAsync(20000);
+    expect(await pending).toBeNull();
+
     fetchMock.mockRestore();
+    jest.useRealTimers();
   });
 
   it('getGenres returns GENRES', () => {

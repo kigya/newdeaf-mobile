@@ -30,6 +30,23 @@ describe('favorites store', () => {
     expect(useFavoritesStore.getState().hydrated).toBe(true);
   });
 
+  it('hydrate re-reads when mutated during list', async () => {
+    let resolveList: (v: unknown) => void = () => undefined;
+    (listFavorites as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve;
+        })
+    );
+    (listFavorites as jest.Mock).mockResolvedValueOnce([{ ...movie, id: 'after', createdAt: 2 }]);
+
+    const hydratePromise = useFavoritesStore.getState().hydrate();
+    await useFavoritesStore.getState().remove('x');
+    resolveList([{ ...movie, createdAt: 1 }]);
+    await hydratePromise;
+    expect(useFavoritesStore.getState().items[0]?.id).toBe('after');
+  });
+
   it('toggles add then remove', async () => {
     const added = await useFavoritesStore.getState().toggle(movie);
     expect(added).toBe(true);
@@ -40,6 +57,27 @@ describe('favorites store', () => {
     expect(removed).toBe(false);
     expect(deleteFavoriteRow).toHaveBeenCalledWith('7');
     expect(useFavoritesStore.getState().isFavorite('7')).toBe(false);
+  });
+
+  it('toggle fills defaults for missing slug/href', async () => {
+    const bare: MovieSummary = { id: '9', title: 'Bare', slug: '', href: '' };
+    await useFavoritesStore.getState().toggle(bare);
+    expect(upsertFavorite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: '9',
+        slug: '9',
+        href: '/9.html',
+      })
+    );
+  });
+
+  it('toggle add filters existing items by id', async () => {
+    useFavoritesStore.setState({
+      items: [{ ...movie, id: 'other', createdAt: 1 }],
+      hydrated: true,
+    });
+    await useFavoritesStore.getState().toggle({ ...movie, id: 'new' });
+    expect(useFavoritesStore.getState().items.map((i) => i.id)).toEqual(['new', 'other']);
   });
 
   it('guards double-tap in-flight', async () => {

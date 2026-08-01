@@ -70,9 +70,9 @@ export default function CatalogScreen() {
           confirmLabel={t('common.delete')}
           destructive
           onConfirm={() => {
-            const id = pendingRemove?.id;
+            const id = pendingRemove!.id;
             setPendingRemove(null);
-            if (id) void clearById(id);
+            void clearById(id);
           }}
           onCancel={() => setPendingRemove(null)}
         />

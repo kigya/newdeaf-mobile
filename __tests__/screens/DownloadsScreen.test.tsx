@@ -49,15 +49,15 @@ jest.mock('@/src/shared/ui/YoutubeDownloadSheet', () => ({
 }));
 
 jest.mock('@/src/features/playback/StreamResolver', () => ({
-  StreamResolver: ({
-    onResolved,
-    onError,
-  }: {
+  StreamResolver: (props: {
     onResolved: (p: unknown) => void;
     onError: (m: string) => void;
   }) => {
     const ReactLocal = require('react');
     const { Pressable, Text, View } = require('react-native');
+    // Expose callbacks for tests (parent uses pointerEvents none).
+    (global as unknown as { __downloadsResolverProps?: typeof props }).__downloadsResolverProps =
+      props;
     return ReactLocal.createElement(
       View,
       null,
@@ -66,7 +66,7 @@ jest.mock('@/src/features/playback/StreamResolver', () => ({
         {
           testID: 'resolver-ok',
           onPress: () =>
-            onResolved({
+            props.onResolved({
               hlsSource: [{ label: 'a', quality: { '720': 'u' } }],
               tracks: [],
             }),
@@ -75,7 +75,7 @@ jest.mock('@/src/features/playback/StreamResolver', () => ({
       ),
       ReactLocal.createElement(
         Pressable,
-        { testID: 'resolver-err', onPress: () => onError('resolve failed') },
+        { testID: 'resolver-err', onPress: () => props.onError('resolve failed') },
         ReactLocal.createElement(Text, null, 'resolve-err')
       )
     );
@@ -191,8 +191,127 @@ describe('DownloadsScreen', () => {
     ];
     await render(<DownloadsScreen />);
     expect(screen.getByText(t('player.resolving'))).toBeTruthy();
-    // Host has pointerEvents="none" — assert mount only (presses are blocked).
     expect(screen.getByTestId('resolver-ok')).toBeTruthy();
     expect(screen.getByTestId('resolver-err')).toBeTruthy();
+
+    const props = (global as unknown as { __downloadsResolverProps: {
+      onResolved: (p: unknown) => void;
+      onError: (m: string) => void;
+    } }).__downloadsResolverProps;
+    props.onResolved({ hlsSource: [{ label: 'a', quality: { '720': 'u' } }], tracks: [] });
+    await waitFor(() => expect(mockCompleteMovieRetry).toHaveBeenCalled());
+
+    mockCompleteMovieRetry.mockRejectedValueOnce(new Error('complete fail'));
+    props.onResolved({ hlsSource: [{ label: 'a', quality: { '720': 'u' } }], tracks: [] });
+    await waitFor(() =>
+      expect(screen.getByText(t('downloads.retryFailedTitle'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByText(t('common.gotIt')));
+
+    props.onError('resolve failed');
+    await waitFor(() => expect(mockFailMovieResolve).toHaveBeenCalled());
+  });
+
+  it('shows failed status without error and cancels delete', async () => {
+    mockStoreItems = [
+      baseItem({
+        id: 'f1',
+        status: 'failed',
+        error: undefined,
+        playlistPath: undefined,
+      }),
+      baseItem({
+        id: 'weird',
+        status: 'paused' as DownloadRecord['status'],
+        playlistPath: undefined,
+      }),
+    ];
+    await render(<DownloadsScreen />);
+    expect(screen.getByText(t('downloads.failed'))).toBeTruthy();
+    await fireEvent.press(screen.getAllByTestId('icon-trash-outline')[0]);
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+  });
+
+  it('retry failure shows error dialog and cancel clears it', async () => {
+    mockRetry.mockRejectedValueOnce(new Error('retry boom'));
+    mockStoreItems = [
+      baseItem({
+        id: 'fail1',
+        status: 'failed',
+        error: 'nope',
+        playlistPath: undefined,
+      }),
+    ];
+    await render(<DownloadsScreen />);
+    await fireEvent.press(screen.getByTestId('icon-refresh'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloads.retryFailedTitle'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByTestId('confirm-dialog-backdrop'));
+    await waitFor(() =>
+      expect(screen.queryByText(t('downloads.retryFailedTitle'))).toBeNull()
+    );
+  });
+
+  it('press on incomplete does not navigate; long-press deletes', async () => {
+    mockStoreItems = [
+      baseItem({
+        id: 'inc1',
+        status: 'completed',
+        playlistPath: undefined,
+      }),
+    ];
+    await render(<DownloadsScreen />);
+    await fireEvent.press(screen.getByText('Downloaded Film'));
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('resolver ignores callbacks when resolving id mismatches media fetch host', async () => {
+    mockStoreItems = [
+      baseItem({
+        id: 'dl2',
+        status: 'downloading',
+        progress: 0.1,
+        playerUrl: 'https://player.example/other',
+        playlistPath: undefined,
+      }),
+      baseItem({
+        id: 'res1',
+        status: 'resolving',
+        playerUrl: 'https://player.example/p',
+        playlistPath: undefined,
+      }),
+    ];
+    await render(<DownloadsScreen />);
+    const props = (global as unknown as { __downloadsResolverProps: {
+      onResolved: (p: unknown) => void;
+      onError: (m: string) => void;
+    } }).__downloadsResolverProps;
+    // mediaFetchMovie is dl2 (first match); resolvingMovie is res1 — ids differ
+    props.onResolved({ hlsSource: [{ label: 'a', quality: { '720': 'u' } }], tracks: [] });
+    props.onError('x');
+    expect(mockCompleteMovieRetry).not.toHaveBeenCalled();
+    expect(mockFailMovieResolve).not.toHaveBeenCalled();
+  });
+
+  it('mounts media fetch host for queued movie with playerUrl', async () => {
+    mockStoreItems = [
+      baseItem({
+        id: 'q1',
+        status: 'queued',
+        playerUrl: 'https://player.example/q',
+        playlistPath: undefined,
+      }),
+    ];
+    await render(<DownloadsScreen />);
+    expect(screen.getByTestId('resolver-ok')).toBeTruthy();
+  });
+
+  it('cancels delete confirm without removing', async () => {
+    mockStoreItems = [baseItem()];
+    await render(<DownloadsScreen />);
+    await fireEvent.press(screen.getByTestId('icon-trash-outline'));
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+    expect(mockRemove).not.toHaveBeenCalled();
   });
 });

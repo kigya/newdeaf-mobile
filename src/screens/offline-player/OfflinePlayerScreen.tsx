@@ -52,7 +52,6 @@ export default function OfflinePlayerScreen() {
         );
         const saved = await fetchProgress(catalogId, row.season, row.episode);
         if (cancelled) return;
-
         if (isResumable(saved)) {
           setResumeTarget(saved);
           setPlayMode('prompt');
@@ -61,7 +60,8 @@ export default function OfflinePlayerScreen() {
           setPlayMode('playing');
         }
       } catch (e) {
-        if (!cancelled) setError(errorMessage(e, t('common.error')));
+        if (cancelled) return;
+        setError(errorMessage(e, t('common.error')));
       }
     })();
     return () => {
@@ -71,14 +71,15 @@ export default function OfflinePlayerScreen() {
 
   const startPlayback = useCallback(
     async (mode: 'resume' | 'start') => {
-      if (!item) return;
+      // Prompt UI only mounts after `item` is loaded.
+      const row = item as DownloadRecord;
       const catalogId = catalogMovieIdFromDownloadMovieId(
-        item.movieId,
-        item.season,
-        item.episode
+        row.movieId,
+        row.season,
+        row.episode
       );
       if (mode === 'start') {
-        await clearProgress(catalogId, item.season, item.episode);
+        await clearProgress(catalogId, row.season, row.episode);
         setInitialPositionSec(0);
       } else {
         setInitialPositionSec(resumeTarget?.positionSec ?? 0);
@@ -90,24 +91,25 @@ export default function OfflinePlayerScreen() {
 
   const handleProgress = useCallback(
     (payload: { positionSec: number; durationSec?: number }) => {
-      if (!item) return;
+      // OfflinePlayer only mounts when `item` is loaded.
+      const row = item as DownloadRecord;
       const catalogId = catalogMovieIdFromDownloadMovieId(
-        item.movieId,
-        item.season,
-        item.episode
+        row.movieId,
+        row.season,
+        row.episode
       );
       const gen = ++saveGenRef.current;
       void upsertProgress({
         movieId: catalogId,
-        season: item.season,
-        episode: item.episode,
+        season: row.season,
+        episode: row.episode,
         positionSec: payload.positionSec,
         durationSec: payload.durationSec,
-        title: item.title,
-        posterUrl: item.posterUrl,
-        isSeries: item.season != null && item.episode != null,
+        title: row.title,
+        posterUrl: row.posterUrl,
+        isSeries: row.season != null && row.episode != null,
         source: 'offline',
-        downloadId: item.id,
+        downloadId: row.id,
         saveGeneration: gen,
       });
     },
@@ -140,7 +142,7 @@ export default function OfflinePlayerScreen() {
         <ConfirmDialog
           visible
           title={t('resume.title')}
-          message={resumeTarget ? resumeDialogMessage(resumeTarget) : undefined}
+          message={resumeDialogMessage(resumeTarget as WatchProgressRecord)}
           confirmLabel={t('resume.continue')}
           cancelLabel={t('resume.startOver')}
           onConfirm={() => void startPlayback('resume')}

@@ -44,9 +44,8 @@ export default function FavoritesScreen() {
         destructive
         onCancel={() => setPendingRemove(null)}
         onConfirm={() => {
-          if (pendingRemove) {
-            void remove(pendingRemove.id);
-          }
+          const id = pendingRemove!.id;
+          void remove(id);
           setPendingRemove(null);
         }}
       />

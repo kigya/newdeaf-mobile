@@ -86,7 +86,9 @@ export default function SearchScreen() {
           placeholderTextColor={colors.textMuted}
           style={styles.input}
           returnKeyType="search"
-          onSubmitEditing={runSearch}
+          onSubmitEditing={() => {
+            void runSearch();
+          }}
           autoCorrect={false}
           blurOnSubmit
         />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import type { MovieSummary } from '@/src/data/catalog/types';
@@ -96,6 +96,39 @@ describe('MovieCard', () => {
     );
     expect(screen.getByText('Test Movie')).toBeTruthy();
   });
+
+  it('renders without year and applies pressed style', async () => {
+    const noYear = { ...movie, year: undefined, kpRating: undefined, imdbRating: undefined };
+    const TestRenderer = require('react-test-renderer');
+    let renderer: {
+      root: {
+        findAll: (fn: (n: { props?: Record<string, unknown> }) => boolean) => { props: { style: (s: { pressed: boolean }) => unknown } }[];
+      };
+      unmount: () => void;
+    };
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MovieCard movie={noYear} width={100} onPress={jest.fn()} index={20} />
+      );
+    });
+    const pressable = renderer!.root.findAll(
+      (n) => typeof n.props?.style === 'function' && typeof n.props?.onPress === 'function'
+    )[0];
+    expect(pressable.props.style({ pressed: true })).toBeTruthy();
+    expect(pressable.props.style({ pressed: false })).toBeTruthy();
+    renderer!.unmount();
+  });
+
+  it('shows imdb when kp missing via ternary else', async () => {
+    await render(
+      <MovieCard
+        movie={{ ...movie, kpRating: undefined, imdbRating: '8.8' }}
+        width={100}
+        onPress={jest.fn()}
+      />
+    );
+    expect(screen.getByText('8.8')).toBeTruthy();
+  });
 });
 
 describe('MovieGrid', () => {
@@ -114,6 +147,7 @@ describe('MovieGrid', () => {
 
   it('renders movies and navigates on press', async () => {
     const mockPush = mockRouterPush();
+    const onScrollBeginDrag = jest.fn();
     await render(
       <MovieGrid
         movies={[movie]}
@@ -121,6 +155,7 @@ describe('MovieGrid', () => {
         getWatchProgress={() => undefined}
         onLongPressMovie={jest.fn()}
         loadingMore
+        onScrollBeginDrag={onScrollBeginDrag}
       />
     );
     await fireEvent.press(
@@ -134,6 +169,43 @@ describe('MovieGrid', () => {
     );
   });
 
+  it('invokes long-press handler and empty posterUrl param', async () => {
+    const mockPush = mockRouterPush();
+    const onLongPressMovie = jest.fn();
+    await render(
+      <MovieGrid
+        movies={[series]}
+        onLongPressMovie={onLongPressMovie}
+      />
+    );
+    await fireEvent(screen.getByLabelText('Series One'), 'onLongPress');
+    expect(onLongPressMovie).toHaveBeenCalledWith(series);
+    await fireEvent.press(screen.getByLabelText('Series One'));
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ posterUrl: '' }),
+      })
+    );
+  });
+
+  it('dismisses keyboard on scroll and omits long-press handler', async () => {
+    const { Keyboard, FlatList } = require('react-native');
+    const TestRenderer = require('react-test-renderer');
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+    mockRouterPush();
+    let renderer: { root: { findByType: (t: unknown) => { props: Record<string, any> } }; unmount: () => void };
+    await act(async () => {
+      renderer = TestRenderer.create(<MovieGrid movies={[movie]} />);
+    });
+    const list = renderer!.root.findByType(FlatList);
+    list.props.onScrollBeginDrag();
+    expect(dismiss).toHaveBeenCalled();
+    const cardProps = list.props.renderItem({ item: movie, index: 0 }).props;
+    expect(cardProps.onLongPress).toBeUndefined();
+    renderer!.unmount();
+    dismiss.mockRestore();
+  });
+
   it('keeps FlatList when ListHeaderComponent provided while empty loading', async () => {
     await render(
       <MovieGrid
@@ -145,6 +217,19 @@ describe('MovieGrid', () => {
     );
     expect(screen.toJSON()).toBeTruthy();
   });
+
+  it('shows empty list empty-component when header present and not loading', async () => {
+    await render(
+      <MovieGrid
+        movies={[]}
+        loading={false}
+        ListHeaderComponent={<React.Fragment />}
+        emptyTitle="No items"
+        emptySubtitle="Sub"
+      />
+    );
+    expect(screen.getByText('No items')).toBeTruthy();
+  });
 });
 
 describe('GenresBanner', () => {
@@ -153,5 +238,25 @@ describe('GenresBanner', () => {
     await render(<GenresBanner />);
     await fireEvent.press(screen.getByText(t('catalog.browseGenres')));
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/genres');
+  });
+
+  it('applies pressed style', async () => {
+    mockRouterPush();
+    const TestRenderer = require('react-test-renderer');
+    let renderer: {
+      root: {
+        findAll: (fn: (n: { props?: Record<string, unknown> }) => boolean) => { props: { style: (s: { pressed: boolean }) => unknown } }[];
+      };
+      unmount: () => void;
+    };
+    await act(async () => {
+      renderer = TestRenderer.create(<GenresBanner />);
+    });
+    const pressable = renderer!.root.findAll(
+      (n) => typeof n.props?.style === 'function' && typeof n.props?.onPress === 'function'
+    )[0];
+    expect(pressable.props.style({ pressed: true })).toBeTruthy();
+    expect(pressable.props.style({ pressed: false })).toBeTruthy();
+    renderer!.unmount();
   });
 });

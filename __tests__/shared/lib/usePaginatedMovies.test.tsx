@@ -99,4 +99,56 @@ describe('usePaginatedMovies', () => {
     );
     await waitFor(() => expect(result.current.error).toBe('fallback'));
   });
+
+  it('ignores stale replace responses', async () => {
+    let resolveFirst: (v: unknown) => void = () => undefined;
+    const fetchPage = jest
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockResolvedValueOnce({ items: [movie('fresh')], hasMore: false });
+
+    const { result, rerender } = await renderHook(
+      ({ fetcher }) => usePaginatedMovies(fetcher, { loadErrorFallback: 'err' }),
+      { initialProps: { fetcher: fetchPage } }
+    );
+
+    const fetchPage2 = jest.fn(async () => ({ items: [movie('fresh')], hasMore: false }));
+    rerender({ fetcher: fetchPage2 });
+    await waitFor(() => expect(result.current.movies[0]?.id).toBe('fresh'));
+
+    resolveFirst({ items: [movie('stale')], hasMore: true });
+    await act(async () => {});
+    expect(result.current.movies[0]?.id).toBe('fresh');
+  });
+
+  it('ignores stale error from superseded request', async () => {
+    let rejectFirst: (e: unknown) => void = () => undefined;
+    const fetchPage = jest.fn().mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        })
+    );
+
+    const { result, rerender } = await renderHook(
+      ({ fetcher }) =>
+        usePaginatedMovies(fetcher, {
+          loadErrorFallback: 'err',
+          clearOnReplaceError: true,
+        }),
+      { initialProps: { fetcher: fetchPage } }
+    );
+
+    const fetchPage2 = jest.fn(async () => ({ items: [movie('ok')], hasMore: false }));
+    rerender({ fetcher: fetchPage2 });
+    await waitFor(() => expect(result.current.movies[0]?.id).toBe('ok'));
+    rejectFirst(new Error('stale'));
+    await act(async () => {});
+    expect(result.current.error).toBeNull();
+  });
 });

@@ -92,11 +92,11 @@ export function MovieCard({
                 <View style={[styles.badge, styles.kp]}>
                   <Text style={styles.badgeText}>{movie.kpRating}</Text>
                 </View>
-              ) : movie.imdbRating ? (
+              ) : (
                 <View style={[styles.badge, styles.imdb]}>
                   <Text style={[styles.badgeText, styles.imdbText]}>{movie.imdbRating}</Text>
                 </View>
-              ) : null}
+              )}
             </View>
           )}
           {showProgress ? (

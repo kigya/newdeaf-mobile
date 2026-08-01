@@ -15,6 +15,7 @@ import { StreamResolver } from '@/src/features/playback/StreamResolver';
 import { t } from '@/src/shared/i18n';
 import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { runPendingDelete } from '@/src/screens/downloads/pendingDelete';
 
 function statusLabel(item: DownloadRecord): string {
   switch (item.status) {
@@ -171,9 +172,9 @@ export default function DownloadsScreen() {
   }, [hydrated, hydrate]);
 
   const confirmRemove = () => {
-    const id = pendingDelete?.id;
+    const pending = pendingDelete;
     setPendingDelete(null);
-    if (id) void remove(id);
+    runPendingDelete(pending, remove);
   };
 
   return (

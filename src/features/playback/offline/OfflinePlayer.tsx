@@ -42,11 +42,11 @@ export function OfflinePlayer({
     void (async () => {
       try {
         const uri = await prepareLocalPlaybackUri(playlistPath, mediaKind);
-        if (!cancelled) setReadyUri(uri);
+        if (cancelled) return;
+        setReadyUri(uri);
       } catch (e) {
-        if (!cancelled) {
-          setPrepareError(errorMessage(e, t('offline.playbackError')));
-        }
+        if (cancelled) return;
+        setPrepareError(errorMessage(e, t('offline.playbackError')));
       }
     })();
     return () => {

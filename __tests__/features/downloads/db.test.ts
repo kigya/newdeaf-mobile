@@ -120,6 +120,24 @@ describe('downloads db', () => {
           source: '',
           mediaKind: '',
         }),
+        sampleRow({
+          id: 'd4',
+          status: null,
+          progress: null,
+          videoDir: null,
+          playlistPath: null,
+          subtitlePath: null,
+          playerUrl: null,
+          hlsUrl: null,
+          subtitleUrl: null,
+          error: null,
+          youtubeUrl: null,
+          season: null,
+          episode: null,
+        }),
+        sampleRow({ id: 'd5', status: 'resolving' }),
+        sampleRow({ id: 'd6', status: 'downloading' }),
+        sampleRow({ id: 'd7', status: 'failed' }),
       ];
     });
 
@@ -135,6 +153,17 @@ describe('downloads db', () => {
     expect(rows[2].episode).toBe(2);
     expect(rows[2].source).toBe('movie');
     expect(rows[2].mediaKind).toBe('hls');
+    expect(rows[3].status).toBe('failed');
+    expect(rows[3].progress).toBe(0);
+    expect(rows[3].videoDir).toBeUndefined();
+    expect(rows[3].playlistPath).toBeUndefined();
+    expect(rows[3].subtitlePath).toBeUndefined();
+    expect(rows[3].playerUrl).toBeUndefined();
+    expect(rows[3].hlsUrl).toBeUndefined();
+    expect(rows[3].subtitleUrl).toBeUndefined();
+    expect(rows[4].status).toBe('resolving');
+    expect(rows[5].status).toBe('downloading');
+    expect(rows[6].status).toBe('failed');
   });
 
   it('getDownload returns null or mapped record', async () => {
