@@ -34,6 +34,11 @@ export const en: TranslationKeys = {
     loadError: 'Failed to load catalog',
     yearFilter: 'Year',
     sortNewest: 'Newest first',
+    continueWatching: 'Continue watching',
+    browseGenres: 'Browse by genre',
+    browseGenresSub: 'Find movies by category',
+    removeContinueTitle: 'Remove from continue watching?',
+    removeContinueMessage: '“%{title}” will be removed from your watch history.',
   },
   search: {
     title: 'Search',
@@ -94,7 +99,7 @@ export const en: TranslationKeys = {
     emptySubtitle: 'Download a movie from its page or a YouTube video by link',
     ytTitle: 'YouTube Video Downloader',
     ytSub: 'Download a video by link',
-    ytBadge: 'Downloaded video',
+    ytBadge: 'YouTube Video',
     subtitlesLine: 'Subtitles: %{label}',
     queued: 'Queued',
     resolving: 'Preparing…',
@@ -113,6 +118,8 @@ export const en: TranslationKeys = {
     subtitle: 'Paste a video link — it will appear in Downloads next to movies',
     placeholder: 'https://youtube.com/watch?v=…',
     cta: 'Download video',
+    chooseQuality: 'Choose quality',
+    quality: 'Quality',
     invalidUrl: 'Paste a valid YouTube link',
     startFailed: 'Could not start download',
     badLink: 'Invalid YouTube link',
@@ -153,6 +160,7 @@ export const en: TranslationKeys = {
   },
   offline: {
     fileNotFound: 'File not found',
+    playbackError: 'Playback error',
   },
   resume: {
     title: 'Continue watching?',

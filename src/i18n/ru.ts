@@ -32,6 +32,11 @@ export const ru = {
     loadError: 'Не удалось загрузить каталог',
     yearFilter: 'Год',
     sortNewest: 'Сначала новые',
+    continueWatching: 'Продолжить просмотр',
+    browseGenres: 'Искать по жанрам',
+    browseGenresSub: 'Найти фильмы по категории',
+    removeContinueTitle: 'Убрать из «Продолжить просмотр»?',
+    removeContinueMessage: '«%{title}» исчезнет из истории просмотра.',
   },
   search: {
     title: 'Поиск',
@@ -92,7 +97,7 @@ export const ru = {
     emptySubtitle: 'Скачайте фильм с карточки или YouTube-видео по ссылке',
     ytTitle: 'YouTube Video Downloader',
     ytSub: 'Скачать видео по ссылке',
-    ytBadge: 'Скачанное видео',
+    ytBadge: 'YouTube видео',
     subtitlesLine: 'Субтитры: %{label}',
     queued: 'В очереди',
     resolving: 'Подготовка…',
@@ -111,6 +116,8 @@ export const ru = {
     subtitle: 'Вставьте ссылку на видео — оно появится в загрузках рядом с фильмами',
     placeholder: 'https://youtube.com/watch?v=…',
     cta: 'Скачать видео',
+    chooseQuality: 'Выбрать качество',
+    quality: 'Качество',
     invalidUrl: 'Вставьте корректную ссылку на YouTube',
     startFailed: 'Не удалось начать загрузку',
     badLink: 'Некорректная ссылка на YouTube',
@@ -151,6 +158,7 @@ export const ru = {
   },
   offline: {
     fileNotFound: 'Файл не найден',
+    playbackError: 'Ошибка воспроизведения',
   },
   resume: {
     title: 'Продолжить просмотр?',

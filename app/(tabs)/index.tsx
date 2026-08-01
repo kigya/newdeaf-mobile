@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { fetchHomeMovies } from '@/src/api/catalog';
 import type { MovieSummary } from '@/src/api/types';
+import { ConfirmDialog } from '@/src/components/ConfirmDialog';
+import { ContinueWatchingRail } from '@/src/components/ContinueWatchingRail';
+import { GenresBanner } from '@/src/components/GenresBanner';
 import { MovieGrid } from '@/src/components/MovieGrid';
 import { Screen } from '@/src/components/Screen';
 import { t } from '@/src/i18n';
 import { colors, fonts, spacing } from '@/src/theme';
 import { useWatchProgressStore } from '@/src/watch-progress/store';
+import type { WatchProgressRecord } from '@/src/watch-progress/types';
 
 export default function CatalogScreen() {
   const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);
+  const clearById = useWatchProgressStore((s) => s.clearById);
   const [movies, setMovies] = useState<MovieSummary[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -18,6 +23,7 @@ export default function CatalogScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [pendingRemove, setPendingRemove] = useState<WatchProgressRecord | null>(null);
 
   const load = useCallback(async (targetPage: number, mode: 'replace' | 'append') => {
     try {
@@ -49,6 +55,16 @@ export default function CatalogScreen() {
     void load(1, 'replace').finally(() => setLoading(false));
   }, [load]);
 
+  const listHeader = useMemo(
+    () => (
+      <View style={{ marginHorizontal: -spacing.lg }}>
+        <ContinueWatchingRail onRequestRemove={setPendingRemove} />
+        <GenresBanner />
+      </View>
+    ),
+    []
+  );
+
   return (
     <Screen title={t('catalog.title')} subtitle={t('catalog.subtitle')}>
       {error ? (
@@ -70,6 +86,7 @@ export default function CatalogScreen() {
           loadingMore={loadingMore}
           refreshing={refreshing}
           getWatchProgress={getWatchProgress}
+          ListHeaderComponent={listHeader}
           onRefresh={() => {
             setRefreshing(true);
             void load(1, 'replace').finally(() => setRefreshing(false));
@@ -81,6 +98,23 @@ export default function CatalogScreen() {
           }}
           emptyTitle={t('catalog.emptyTitle')}
           emptySubtitle={t('catalog.emptySubtitle')}
+        />
+        <ConfirmDialog
+          visible={!!pendingRemove}
+          title={t('catalog.removeContinueTitle')}
+          message={
+            pendingRemove
+              ? t('catalog.removeContinueMessage', { title: pendingRemove.title })
+              : undefined
+          }
+          confirmLabel={t('common.delete')}
+          destructive
+          onConfirm={() => {
+            const id = pendingRemove?.id;
+            setPendingRemove(null);
+            if (id) void clearById(id);
+          }}
+          onCancel={() => setPendingRemove(null)}
         />
       </View>
     </Screen>

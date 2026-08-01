@@ -51,7 +51,17 @@ export function MovieGrid({
   const cardWidth = (width - horizontalPad * 2 - gap * (columns - 1)) / columns;
   const router = useRouter();
 
-  if (loading && movies.length === 0) {
+  const listEmpty =
+    loading && movies.length === 0 ? (
+      <View style={styles.loader}>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </View>
+    ) : !loading && movies.length === 0 ? (
+      <EmptyState title={emptyTitle} subtitle={emptySubtitle} />
+    ) : null;
+
+  // Always use FlatList when a header is provided so rail/banner stay visible while loading.
+  if (!ListHeaderComponent && loading && movies.length === 0) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator color={colors.accent} size="large" />
@@ -59,7 +69,7 @@ export function MovieGrid({
     );
   }
 
-  if (!loading && movies.length === 0) {
+  if (!ListHeaderComponent && !loading && movies.length === 0) {
     return <EmptyState title={emptyTitle} subtitle={emptySubtitle} />;
   }
 
@@ -70,13 +80,14 @@ export function MovieGrid({
       keyExtractor={(item) => item.id}
       numColumns={columns}
       contentContainerStyle={styles.content}
-      columnWrapperStyle={columns > 1 ? { gap } : undefined}
+      columnWrapperStyle={columns > 1 && movies.length > 0 ? { gap } : undefined}
       showsVerticalScrollIndicator={false}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.6}
       refreshing={refreshing}
       onRefresh={onRefresh}
       ListHeaderComponent={ListHeaderComponent}
+      ListEmptyComponent={listEmpty}
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       keyboardDismissMode="on-drag"
       onScrollBeginDrag={() => {
@@ -121,6 +132,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxxl,
+    flexGrow: 1,
   },
   loader: {
     flex: 1,

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,8 +18,24 @@ export default function GenresScreen() {
   const colCount = Math.min(columns, 3);
   const itemWidth = (width - pad * 2 - gap * (colCount - 1)) / colCount;
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)');
+  };
+
   return (
-    <Screen title={t('genres.title')} subtitle={t('genres.subtitle')}>
+    <Screen
+      title={t('genres.title')}
+      subtitle={t('genres.subtitle')}
+      left={
+        <Pressable onPress={handleBack} hitSlop={12} accessibilityLabel={t('common.back')}>
+          <Ionicons name="chevron-back" size={28} color={colors.text} />
+        </Pressable>
+      }
+    >
       <FlatList
         data={genres}
         key={colCount}

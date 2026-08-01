@@ -7,17 +7,27 @@ import { colors, fonts, spacing, typography } from '@/src/theme';
 type Props = {
   title?: string;
   subtitle?: string;
+  left?: ReactNode;
   right?: ReactNode;
   children: ReactNode;
   style?: ViewStyle;
   edges?: ('top' | 'right' | 'bottom' | 'left')[];
 };
 
-export function Screen({ title, subtitle, right, children, style, edges = ['top'] }: Props) {
+export function Screen({
+  title,
+  subtitle,
+  left,
+  right,
+  children,
+  style,
+  edges = ['top'],
+}: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
-      {(title || right) && (
+      {(title || left || right) && (
         <View style={styles.header}>
+          {left ? <View style={styles.left}>{left}</View> : null}
           <View style={styles.headerText}>
             {title ? <Text style={styles.title}>{title}</Text> : null}
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -43,6 +53,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  left: {
+    paddingBottom: 2,
   },
   headerText: {
     flex: 1,
