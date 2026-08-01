@@ -5,7 +5,7 @@
 <p align="center">
   <strong>Native Android client for <a href="https://newdeaf.top">newdeaf.top</a></strong><br />
   Catalog · search · online player · offline library · Picture-in-Picture<br />
-  <em>Фильмы с субтитрами — в кармане, с загрузками и нативным плеером.</em>
+  <em>Movies with subtitles — in your pocket, with downloads and a native player.</em>
 </p>
 
 <p align="center">
