@@ -1,8 +1,8 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { t } from '@/src/i18n';
-import { colors, fonts, spacing } from '@/src/theme';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, spacing } from '@/src/shared/theme';
 
 export default function NotFoundScreen() {
   return (

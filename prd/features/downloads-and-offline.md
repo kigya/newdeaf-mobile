@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `app/(tabs)/downloads.tsx`, `app/offline/[downloadId].tsx`, `src/downloads/`, `src/offline/`, `MediaPlayer`, `plugins/withDownloadForegroundService.js`
+- **Related code:** `app/(tabs)/downloads.tsx` → `src/screens/downloads/`, `app/offline/[downloadId].tsx` → `src/screens/offline-player/`, `src/features/downloads/`, `src/features/playback/offline/`, `MediaPlayer`, `plugins/withDownloadForegroundService.js`
 - **Screens:** [`../screens/downloads.md`](../screens/downloads.md), [`offline-player.md`](../screens/offline-player.md)
 
 ## Problem
@@ -57,8 +57,8 @@ Users want to save streams (and optional YouTube sources) and watch them without
 
 ## Technical context
 
-- Module: `src/downloads/{types,db,store,hls,hlsPlaylist}.ts` + progressive/youtube/match/mediaFetch
-- Offline: `src/offline/` + `prepareLocalSource` (defensive BYTERANGE strip for legacy copies)
+- Module: `src/features/downloads/{types,db,store,hls,hlsPlaylist}.ts` + progressive/youtube/match/mediaFetch
+- Offline: `src/features/playback/offline/` + `prepareLocalSource` (defensive BYTERANGE strip for legacy copies)
 - Skills: `newdeaf-playback`, `newdeaf-local-data`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)
 

@@ -1,0 +1,30 @@
+export const colors = {
+  bg: '#090C10',
+  bgElevated: '#11161D',
+  bgCard: '#151B24',
+  bgMuted: '#1C2430',
+  border: '#243041',
+  text: '#F2F5F8',
+  textSecondary: '#9AA8BC',
+  textMuted: '#6B7A8F',
+  accent: '#FFBB00',
+  accentSoft: '#FFBB0033',
+  accentPressed: '#E6A800',
+  danger: '#E85D4C',
+  success: '#3DCF8E',
+  kp: '#FF6600',
+  imdb: '#F5C518',
+  overlay: 'rgba(9, 12, 16, 0.72)',
+  white: '#FFFFFF',
+  black: '#000000',
+  /** Scrim overlays — values match prior inline rgba literals (pixel-identical). */
+  blackOverlay12: 'rgba(0,0,0,0.12)',
+  blackOverlay35: 'rgba(0,0,0,0.35)',
+  blackOverlay45: 'rgba(0,0,0,0.45)',
+  blackOverlay65: 'rgba(0,0,0,0.65)',
+  blackOverlay70: 'rgba(0,0,0,0.7)',
+  blackOverlay75: 'rgba(0,0,0,0.75)',
+  blackShadow: 'rgba(0,0,0,0.9)',
+} as const;
+
+export type ColorName = keyof typeof colors;

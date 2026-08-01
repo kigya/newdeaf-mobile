@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/(tabs)` / `/(tabs)/index`
-- **Related code:** `app/(tabs)/index.tsx`, `MovieGrid`, `ContinueWatchingRail`, `GenresBanner`, `fetchHomeMovies`
+- **Related code:** `app/(tabs)/index.tsx` → `src/screens/catalog/`, `MovieGrid`, `ContinueWatchingRail`, `GenresBanner`, `fetchHomeMovies`
 
 ## Purpose
 

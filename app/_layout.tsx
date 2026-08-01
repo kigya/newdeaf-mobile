@@ -14,13 +14,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { MediaFetchHost } from '@/src/downloads/MediaFetchHost';
-import { useDownloadsStore } from '@/src/downloads/store';
-import { useFavoritesStore } from '@/src/favorites/store';
-import { t } from '@/src/i18n';
-import { useSettingsStore } from '@/src/settings/store';
-import { colors } from '@/src/theme';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
+import { MediaFetchHost } from '@/src/features/downloads/MediaFetchHost';
+import { useDownloadsStore } from '@/src/features/downloads/store';
+import { useFavoritesStore } from '@/src/features/favorites/store';
+import { t } from '@/src/shared/i18n';
+import { useSettingsStore } from '@/src/features/settings/store';
+import { colors } from '@/src/shared/theme';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
 export { ErrorBoundary } from 'expo-router';
 

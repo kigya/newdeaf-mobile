@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** root Stack (not a content screen)
-- **Related code:** `app/_layout.tsx`, `src/downloads/MediaFetchHost.tsx`, all Zustand stores
+- **Related code:** `app/_layout.tsx`, `src/features/downloads/MediaFetchHost.tsx`, all Zustand stores
 
 ## Purpose
 

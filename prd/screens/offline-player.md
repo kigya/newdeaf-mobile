@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/offline/[downloadId]` — fullScreenModal, fade, no header
-- **Related code:** `app/offline/[downloadId].tsx`, `OfflinePlayer`, `prepareLocalSource`, `MediaPlayer`, VTT
+- **Related code:** `app/offline/[downloadId].tsx` → `src/screens/offline-player/`, `OfflinePlayer`, `prepareLocalSource`, `MediaPlayer`, VTT
 
 ## Params
 

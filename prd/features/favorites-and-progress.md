@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `app/(tabs)/favorites.tsx`, `src/favorites/`, `src/watch-progress/`, Continue Watching on catalog, hydration in `app/_layout.tsx`
+- **Related code:** `app/(tabs)/favorites.tsx` → `src/screens/favorites/`, `src/features/favorites/`, `src/features/watch-progress/`, Continue Watching on catalog, hydration in `app/_layout.tsx`
 - **Screens:** [`../screens/favorites.md`](../screens/favorites.md), catalog/player screens for progress UX
 
 ## Problem
@@ -27,7 +27,7 @@ Users need a local shortlist and resume-where-left-off without an account.
 1. As a viewer, I want to favorite a title.
    - **Acceptance:** Persists after kill; Favorites tab shows items; double-tap safe.
 2. As a viewer, I want watch progress saved.
-   - **Acceptance:** Written via `src/watch-progress/`; resume dialogs on movie detail and offline player when resumable.
+   - **Acceptance:** Written via `src/features/watch-progress/`; resume dialogs on movie detail and offline player when resumable.
 3. As a viewer, I want finished titles to leave Continue Watching.
    - **Acceptance:** Completed upsert deletes the row.
 
@@ -47,7 +47,7 @@ Users need a local shortlist and resume-where-left-off without an account.
 
 ## Technical context
 
-- `src/favorites/{types,db,store}.ts`, `src/watch-progress/{types,db,store,format}.ts`
+- `src/features/favorites/{types,db,store}.ts`, `src/features/watch-progress/{types,db,store,format}.ts`
 - Constants and pure helpers in `watch-progress/types.ts` are unit-tested
 - Skill: `newdeaf-local-data`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)

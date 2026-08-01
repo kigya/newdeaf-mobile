@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/movie/[id]`
-- **Related code:** `app/movie/[id].tsx`, `src/api/catalog.ts`, `tmdb.ts`, `kinopoisk.ts`, `DownloadSheet`, `StreamResolver`
+- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `src/data/catalog/catalog.ts`, `tmdb.ts`, `kinopoisk.ts`, `DownloadSheet`, `StreamResolver`
 
 ## Params
 

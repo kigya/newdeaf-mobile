@@ -10,6 +10,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 - `npm run android:standalone` — release APK with JS bundled (no Metro)
 - `npm run typecheck` — `tsc --noEmit`
 - `npm test` — Jest unit tests (`__tests__/`)
+- `npm run test:coverage` — Jest with **100%** coverage gate on `src/**`
 - `npm run test:watch` — Jest watch mode
 
 ## Tech stack (locked)
@@ -19,59 +20,73 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 | Framework | Expo **57**, React Native **0.86**, React **19** |
 | Language | TypeScript strict (`@/*` → project root) |
 | Routing | Expo Router (file-based, typed routes) |
-| Styling | RN `StyleSheet` + tokens in `src/theme/` (Montserrat) |
+| Styling | RN `StyleSheet` + tokens in `src/shared/theme/` (Montserrat) |
 | Motion | Moti + Reanimated |
 | Client state | Zustand |
 | Persistence | expo-sqlite (`newdeaf.db`), expo-file-system for media |
-| Remote data | Plain `fetch` + HTML scrape of `https://newdeaf.top` (`src/api/`) |
+| Remote data | Plain `fetch` + HTML scrape of `https://newdeaf.top` (`src/data/catalog/`) |
 | Enrichment | TMDB + Kinopoisk (optional env keys; soft-fail) — not a catalog REST API |
 | Online player | Site player in `react-native-webview` |
 | Offline player | `expo-video` + local HLS |
-| i18n | i18n-js + expo-localization (`src/i18n/`, ru/en) |
+| i18n | i18n-js + expo-localization (`src/shared/i18n/`, ru/en) |
 | YouTube | youtubei.js (Metro platform resolve) |
-| Unit tests | Jest + jest-expo (`__tests__/`) |
+| Unit tests | Jest + jest-expo (`__tests__/`), 100% coverage on `src/**` |
 | Patches | patch-package (`patches/react-native-webview+…`) |
 
 No BaaS, auth, payments, analytics, or ESLint in this repo.
 
+## Layered architecture
+
+```
+app/                    # thin Expo Router route shells (re-export screens)
+src/shared/             # theme, i18n, ui, hooks, lib
+src/data/catalog/       # scrape client, parse, TMDB, Kinopoisk
+src/features/           # downloads, favorites, watch-progress, settings, playback
+src/screens/            # screen implementations consumed by app/
+```
+
+Dependency direction: `app` → `screens` → `features` → `data` → `shared`. Do not import features from `shared` or `data`.
+
 ## NEVER
 
-- NEVER suggest NativeWind, Tailwind, styled-components, or Unistyles — use StyleSheet + `src/theme`
-- NEVER hardcode colors, spacing, or radii — use `colors`, `spacing`, `radius`, `fonts`, `typography` from `@/src/theme`
-- NEVER hardcode user-facing strings — use `t()` from `@/src/i18n`
+- NEVER suggest NativeWind, Tailwind, styled-components, or Unistyles — use StyleSheet + `src/shared/theme`
+- NEVER hardcode colors, spacing, or radii — use `colors`, `spacing`, `radius`, `fonts`, `typography` from `@/src/shared/theme`
+- NEVER hardcode user-facing strings — use `t()` from `@/src/shared/i18n`
 - NEVER add React Navigation navigators outside Expo Router file routes
 - NEVER introduce Redux, Jotai, React Query, SWR, or Apollo unless the user explicitly asks
 - NEVER add auth, BaaS, or analytics SDKs unless the user explicitly asks
 - NEVER invent API clients against a REST **catalog** backend — catalog data comes from scraping `newdeaf.top` (TMDB/KP enrichment only)
 - NEVER remove or bypass `patches/` / `patch-package` without an explicit request
 - NEVER refactor unrelated files when fixing a bug or implementing a scoped feature
-- NEVER ship a behavior change without running `npm test` and addressing failures (see `.cursor/rules/newdeaf-tests-required.mdc`)
+- NEVER ship a behavior change without running `npm test` / `npm run test:coverage` and addressing failures (see `.cursor/rules/newdeaf-tests-required.mdc`)
 
 ## Directory map
 
 | Path | Role |
 |------|------|
-| `app/` | Expo Router screens (tabs + stacks) |
-| `app/(tabs)/` | Catalog, search, genres, favorites, downloads, settings |
-| `app/movie/`, `player/`, `offline/`, `genre/` | Detail, online player, offline player, genre list |
-| `src/api/` | Fetch client, HTML parse, catalog types, TMDB, Kinopoisk (`BASE_URL`) |
-| `src/components/` | Shared UI (MovieCard/Grid, sheets, dialogs, Screen) |
-| `src/downloads/` | Zustand + SQLite + HLS/progressive/YouTube download |
-| `src/favorites/` | Zustand + SQLite favorites |
-| `src/watch-progress/` | Zustand + SQLite watch progress |
-| `src/settings/` | Zustand + SQLite settings (locale, default quality) |
-| `src/player/` | WebView player, MediaPlayer, stream resolve |
-| `src/offline/` | Offline playback + VTT |
-| `src/theme/` | Design tokens |
-| `src/i18n/` | Locales and `t()` |
-| `src/hooks/` | e.g. `useBreakpoint` (tablet) |
-| `__tests__/` | Jest unit tests |
+| `app/` | Thin Expo Router route shells |
+| `app/(tabs)/` | Catalog, search, genres, favorites, downloads, settings routes |
+| `app/movie/`, `player/`, `offline/`, `genre/` | Detail, online player, offline player, genre list routes |
+| `src/screens/` | Screen implementations (movie-detail, catalog, downloads, …) |
+| `src/data/catalog/` | Fetch client, HTML parse, catalog types, TMDB, Kinopoisk (`BASE_URL`) |
+| `src/shared/ui/` | Shared UI (MovieCard/Grid, sheets, dialogs, Screen) |
+| `src/shared/theme/` | Design tokens |
+| `src/shared/i18n/` | Locales and `t()` |
+| `src/shared/hooks/` | e.g. `useBreakpoint` (tablet) |
+| `src/shared/lib/` | Small shared helpers (`errorMessage`, UA, pagination hook) |
+| `src/features/downloads/` | Zustand + SQLite + HLS/progressive/YouTube download |
+| `src/features/favorites/` | Zustand + SQLite favorites |
+| `src/features/watch-progress/` | Zustand + SQLite watch progress |
+| `src/features/settings/` | Zustand + SQLite settings (locale, default quality) |
+| `src/features/playback/` | WebView player, MediaPlayer, stream resolve |
+| `src/features/playback/offline/` | Offline playback + VTT |
+| `__tests__/` | Jest unit tests (mirrors layered `src/`) |
 | `prd/` | Product requirements, screens, behavior, ADRs |
 | `plugins/` | Expo config plugins |
 | `patches/` | patch-package patches |
 | `android/` | Native Android project |
 
-Feature modules follow `store.ts` + `db.ts` + `types.ts`.
+Feature modules follow `store.ts` + `db.ts` + `types.ts` under `src/features/*`.
 
 ## Product & agent docs
 

@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/player/[id]` — `presentation: 'fullScreenModal'`, fade, no header
-- **Related code:** `app/player/[id].tsx`, `PlayerWebView`, `src/watch-progress/`
+- **Related code:** `app/player/[id].tsx` → `src/screens/online-player/`, `PlayerWebView`, `src/features/watch-progress/`
 
 ## Params
 

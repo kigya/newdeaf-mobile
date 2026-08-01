@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/(tabs)/favorites`
-- **Related code:** `app/(tabs)/favorites.tsx`, `src/favorites/`
+- **Related code:** `app/(tabs)/favorites.tsx` → `src/screens/favorites/`, `src/features/favorites/`
 
 ## Purpose
 
