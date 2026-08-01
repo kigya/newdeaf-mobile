@@ -80,8 +80,14 @@ export function PlayerWebView({
     if (!mediaFetch || mode !== 'resolve') return;
 
     setPlayerUrl(playerUrl);
-    registerMediaFetchInjector((id, url, modeName) => {
-      const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode: modeName });
+    registerMediaFetchInjector((id, url, modeName, range) => {
+      const payload = JSON.stringify({
+        type: 'nd_fetch',
+        id,
+        url,
+        mode: modeName,
+        range: range ?? null,
+      });
       const js = `(function(){try{var f=document.getElementById('nd-player');if(f&&f.contentWindow){f.contentWindow.postMessage(${JSON.stringify(payload)},'*');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:'no iframe'}));}}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:String(e&&e.message||e)}));}})();true;`;
       webRef.current?.injectJavaScript(js);
     }, 'resolve');

@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 
-type FetchResult = { status: number; body: string; encoding?: 'base64' };
+export type BinaryByteRange = { offset: number; length: number };
+
+type FetchResult = {
+  status: number;
+  body: string;
+  encoding?: 'base64';
+  contentLength?: number | null;
+  byteLength?: number | null;
+};
 
 type Pending = {
   resolve: (value: FetchResult) => void;
@@ -10,7 +18,16 @@ type Pending = {
   chunks?: (string | undefined)[];
   status?: number;
   encoding?: 'base64';
+  contentLength?: number | null;
+  byteLength?: number | null;
 };
+
+type MediaFetchInjector = (
+  id: string,
+  url: string,
+  mode: 'text' | 'bin',
+  range?: BinaryByteRange
+) => void;
 
 type MediaFetchState = {
   playerUrl: string | null;
@@ -24,9 +41,7 @@ type MediaFetchState = {
 
 const pending = new Map<string, Pending>();
 let reqSeq = 0;
-let injectFetch:
-  | ((id: string, url: string, mode: 'text' | 'bin') => void)
-  | null = null;
+let injectFetch: MediaFetchInjector | null = null;
 /** Owner token so sheet unmount does not clear Downloads/host injector. */
 let injectorOwner: string | null = null;
 
@@ -40,7 +55,7 @@ export const useMediaFetchStore = create<MediaFetchState>((set) => ({
 }));
 
 export function registerMediaFetchInjector(
-  fn: ((id: string, url: string, mode: 'text' | 'bin') => void) | null,
+  fn: MediaFetchInjector | null,
   owner = 'default'
 ) {
   if (fn) {
@@ -76,6 +91,8 @@ export function handleMediaFetchMessage(msg: {
   error?: string;
   index?: number;
   count?: number;
+  contentLength?: number | null;
+  byteLength?: number | null;
 }) {
   if (msg.type !== 'nd_fetch_result' || !msg.id) return false;
   const entry = pending.get(msg.id);
@@ -98,6 +115,8 @@ export function handleMediaFetchMessage(msg: {
       status: msg.status ?? 0,
       body: msg.body ?? '',
       encoding: msg.encoding,
+      contentLength: msg.contentLength,
+      byteLength: msg.byteLength,
     });
     return true;
   }
@@ -106,6 +125,8 @@ export function handleMediaFetchMessage(msg: {
     entry.chunks = new Array(count);
     entry.status = msg.status ?? 0;
     entry.encoding = msg.encoding;
+    entry.contentLength = msg.contentLength;
+    entry.byteLength = msg.byteLength;
   }
   if (index >= 0 && index < count) {
     entry.chunks[index] = msg.body ?? '';
@@ -120,6 +141,8 @@ export function handleMediaFetchMessage(msg: {
       status: entry.status ?? msg.status ?? 0,
       body: entry.chunks.join(''),
       encoding: entry.encoding ?? msg.encoding,
+      contentLength: entry.contentLength ?? msg.contentLength,
+      byteLength: entry.byteLength ?? msg.byteLength,
     });
   }
   return true;
@@ -152,7 +175,12 @@ function waitUntilReady(timeoutMs: number, expectedUrl?: string): Promise<void> 
   });
 }
 
-function requestFetch(url: string, mode: 'text' | 'bin', timeoutMs: number): Promise<FetchResult> {
+function requestFetch(
+  url: string,
+  mode: 'text' | 'bin',
+  timeoutMs: number,
+  range?: BinaryByteRange
+): Promise<FetchResult> {
   if (!injectFetch) throw new Error('WebView media fetch not ready');
   const id = `f${++reqSeq}`;
   return new Promise<FetchResult>((resolve, reject) => {
@@ -164,7 +192,7 @@ function requestFetch(url: string, mode: 'text' | 'bin', timeoutMs: number): Pro
     };
     pending.set(id, entry);
     armTimeout(id, entry);
-    injectFetch!(id, url, mode);
+    injectFetch!(id, url, mode, range);
   });
 }
 
@@ -179,11 +207,22 @@ export async function webViewFetchText(url: string, timeoutMs = 45000): Promise<
 
 export async function webViewFetchBinary(
   url: string,
-  timeoutMs = 120000
-): Promise<{ status: number; base64: string }> {
+  timeoutMs = 120000,
+  range?: BinaryByteRange
+): Promise<{
+  status: number;
+  base64: string;
+  contentLength?: number | null;
+  byteLength?: number | null;
+}> {
   await waitUntilReady(20000);
-  const result = await requestFetch(url, 'bin', timeoutMs);
-  return { status: result.status, base64: result.body };
+  const result = await requestFetch(url, 'bin', timeoutMs, range);
+  return {
+    status: result.status,
+    base64: result.body,
+    contentLength: result.contentLength,
+    byteLength: result.byteLength,
+  };
 }
 
 export function isMediaFetchReady(forUrl?: string): boolean {

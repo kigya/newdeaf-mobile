@@ -52,11 +52,13 @@ Users want to save streams (and optional YouTube sources) and watch them without
 | Duplicate same movie | Sheet warns (exact audio+subs or any same-movie) |
 | YouTube vs movie queue | YouTube not on movie serial chain |
 | Subtitle default | Russian full → Russian → first (`pickSubtitleTrack`) |
+| fMP4 / `#EXT-X-BYTERANGE` | Materialize each range into a standalone local file; strip BYTERANGE from `index.m3u8` |
+| Truncated segment body | Reject size mismatch vs range length / Content-Length; fail job (do not mark completed) |
 
 ## Technical context
 
-- Module: `src/downloads/{types,db,store}.ts` + hls/progressive/youtube/match/mediaFetch
-- Offline: `src/offline/` + `prepareLocalSource`
+- Module: `src/downloads/{types,db,store,hls,hlsPlaylist}.ts` + progressive/youtube/match/mediaFetch
+- Offline: `src/offline/` + `prepareLocalSource` (defensive BYTERANGE strip for legacy copies)
 - Skills: `newdeaf-playback`, `newdeaf-local-data`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)
 

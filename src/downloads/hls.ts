@@ -4,7 +4,21 @@ import {
   isMediaFetchReady,
   webViewFetchBinary,
   webViewFetchText,
+  type BinaryByteRange,
 } from '@/src/downloads/mediaFetch';
+import {
+  base64DecodedLength,
+  planHlsOfflineDownload,
+  type ByteRange,
+  type HlsDownloadJob,
+} from '@/src/downloads/hlsPlaylist';
+
+export {
+  base64DecodedLength,
+  parseByteRangeSpec,
+  planHlsOfflineDownload,
+  stripByteRangeAttribute,
+} from '@/src/downloads/hlsPlaylist';
 
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
@@ -84,13 +98,37 @@ export function mediaSegmentHeaders(playerUrl?: string): Record<string, string> 
   };
 }
 
+function assertBinarySize(
+  decodedLen: number,
+  expected?: number | null,
+  contentLength?: number | null
+): void {
+  if (expected != null && expected > 0 && decodedLen !== expected) {
+    throw new Error(`Segment size mismatch: got ${decodedLen}, expected ${expected}`);
+  }
+  // Full-body responses: Content-Length must match decoded payload when present.
+  if (
+    expected == null &&
+    contentLength != null &&
+    contentLength > 0 &&
+    decodedLen !== contentLength
+  ) {
+    throw new Error(`Segment size mismatch: got ${decodedLen}, Content-Length ${contentLength}`);
+  }
+}
+
 async function downloadWithRetry(
   remoteUrl: string,
   destPath: string,
   headers: Record<string, string>,
   errorLabel: string,
-  fallbackHeaders?: Record<string, string>
+  fallbackHeaders?: Record<string, string>,
+  byteRange?: ByteRange
 ): Promise<void> {
+  const rangeHeader: BinaryByteRange | undefined = byteRange
+    ? { offset: byteRange.offset, length: byteRange.length }
+    : undefined;
+
   // Prefer Chrome WebView fetch when host is ready — OkHttp is fingerprint-blocked
   // on some device networks (vkvideo.cloud → 403). Do not fall back to OkHttp then:
   // a failed WebView transfer would otherwise be reported as a misleading OkHttp 403.
@@ -105,9 +143,15 @@ async function downloadWithRetry(
         // ignore
       }
       try {
-        const { status, base64 } = await webViewFetchBinary(remoteUrl);
+        const { status, base64, byteLength, contentLength } = await webViewFetchBinary(
+          remoteUrl,
+          120000,
+          rangeHeader
+        );
         lastStatus = status;
         if (status >= 200 && status < 300 && base64) {
+          const decoded = byteLength ?? base64DecodedLength(base64);
+          assertBinarySize(decoded, byteRange?.length, contentLength);
           await FileSystem.writeAsStringAsync(destPath, base64, {
             encoding: FileSystem.EncodingType.Base64,
           });
@@ -122,7 +166,17 @@ async function downloadWithRetry(
     throw new Error(lastError || `${errorLabel}: ${lastStatus || 'webview'}`);
   }
 
-  const headerSets = fallbackHeaders ? [headers, fallbackHeaders] : [headers];
+  const withRange = (base: Record<string, string>): Record<string, string> =>
+    byteRange
+      ? {
+          ...base,
+          Range: `bytes=${byteRange.offset}-${byteRange.offset + byteRange.length - 1}`,
+        }
+      : base;
+
+  const headerSets = fallbackHeaders
+    ? [withRange(headers), withRange(fallbackHeaders)]
+    : [withRange(headers)];
   let lastStatus = 0;
   for (const headerSet of headerSets) {
     for (let attempt = 0; attempt <= SEGMENT_RETRY_BACKOFF_MS.length; attempt++) {
@@ -136,7 +190,21 @@ async function downloadWithRetry(
       }
       const result = await FileSystem.downloadAsync(remoteUrl, destPath, { headers: headerSet });
       lastStatus = result.status ?? 0;
-      if (lastStatus >= 200 && lastStatus < 300) return;
+      if (lastStatus >= 200 && lastStatus < 300) {
+        const info = await FileSystem.getInfoAsync(destPath);
+        const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
+        try {
+          assertBinarySize(size, byteRange?.length, null);
+          return;
+        } catch (e) {
+          try {
+            await FileSystem.deleteAsync(destPath, { idempotent: true });
+          } catch {
+            // ignore
+          }
+          throw e;
+        }
+      }
       try {
         await FileSystem.deleteAsync(destPath, { idempotent: true });
       } catch {
@@ -308,50 +376,15 @@ export async function downloadHlsToDirectory(
     playerUrl
   );
   throwIfAborted();
-  const lines = parsePlaylistLines(content);
-
-  type Job = { remoteUrl: string; localName: string };
-  const jobs: Job[] = [];
-  const rewritten: string[] = [];
-  let mediaIndex = 0;
-
-  for (const line of lines) {
-    if (line.startsWith('#')) {
-      const mapUri = line.match(/URI="([^"]+)"/)?.[1];
-      if (mapUri && (line.includes('EXT-X-MAP') || line.includes('EXT-X-KEY'))) {
-        const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, mapUri));
-        const isKey = line.includes('EXT-X-KEY');
-        const ext = isKey
-          ? 'key'
-          : abs.includes('.mp4')
-            ? 'mp4'
-            : abs.includes('.m4s')
-              ? 'm4s'
-              : 'bin';
-        const localName = isKey ? `key_${mediaIndex}.${ext}` : `init_${mediaIndex}.${ext}`;
-        jobs.push({ remoteUrl: abs, localName });
-        rewritten.push(line.replace(mapUri, localName));
-        mediaIndex += 1;
-      } else {
-        rewritten.push(line);
-      }
-      continue;
-    }
-
-    const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, line));
-    const ext = abs.includes('.m4s') ? 'm4s' : abs.includes('.mp4') ? 'mp4' : 'ts';
-    const localName = `seg_${String(mediaIndex).padStart(5, '0')}.${ext}`;
-    jobs.push({ remoteUrl: abs, localName });
-    rewritten.push(localName);
-    mediaIndex += 1;
-  }
+  const { jobs, rewrittenLines: rewritten } = planHlsOfflineDownload(content, variantUrl);
 
   const total = Math.max(jobs.length, 1);
   let doneCount = 0;
 
   // Skip segments already on disk (partial resume after interrupt).
   // Batch getInfoAsync — sequential scans starve the JS thread on long movies.
-  const pending: Job[] = [];
+  // For ranged jobs, also require on-disk size to match the byte-range length.
+  const pending: HlsDownloadJob[] = [];
   const scanConcurrency = 16;
   for (let i = 0; i < jobs.length; i += scanConcurrency) {
     throwIfAborted();
@@ -360,7 +393,10 @@ export async function downloadHlsToDirectory(
       slice.map(async (job) => {
         const filePath = `${targetDir}${job.localName}`;
         const info = await FileSystem.getInfoAsync(filePath);
-        return { job, exists: info.exists && 'size' in info && (info.size ?? 0) > 0 };
+        const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
+        const expected = job.byteRange?.length;
+        const ok = size > 0 && (expected == null || size === expected);
+        return { job, exists: ok };
       })
     );
     for (const { job, exists } of infos) {
@@ -385,7 +421,8 @@ export async function downloadHlsToDirectory(
           filePath,
           headers,
           'Segment download failed',
-          playlistHeaders
+          playlistHeaders,
+          job.byteRange
         );
       })
     );
@@ -395,10 +432,8 @@ export async function downloadHlsToDirectory(
 
   throwIfAborted();
   // targetDir is already a file:// URI from expo-file-system — keep relative names so
-  // the playlist stays portable next to the segments.
-  if (!rewritten.some((l) => l.trim() === '#EXT-X-ENDLIST')) {
-    rewritten.push('#EXT-X-ENDLIST');
-  }
+  // the playlist stays portable next to the segments. BYTERANGE tags are stripped —
+  // each local file is already the exact slice.
   const playlistPath = `${targetDir}index.m3u8`;
   await FileSystem.writeAsStringAsync(playlistPath, `${rewritten.join('\n')}\n`);
   onProgress?.(1);

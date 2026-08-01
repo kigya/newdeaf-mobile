@@ -19,7 +19,7 @@
 
 1. Load download record; verify playlist/file exists
 2. If resumable progress for catalog movie id → Continue / Start over dialog
-3. `OfflinePlayer` prepares local URI (HLS relative → absolute `file://`, ensure `#EXT-X-ENDLIST`; progressive passthrough)
+3. `OfflinePlayer` prepares local URI (HLS relative → absolute `file://`, strip legacy BYTERANGE, ensure `#EXT-X-ENDLIST`; progressive passthrough)
 4. `MediaPlayer` (expo-video) with optional local VTT overlay
 5. Progress keyed by catalog movie id (`catalogMovieIdFromDownloadMovieId`); close → `router.back()` + flush
 

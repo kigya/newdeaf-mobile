@@ -52,6 +52,8 @@ Non-obvious runtime rules that span multiple screens. Agents must preserve these
 | YouTube enqueue | Not serialized with movie chain |
 | Progress | Movie HLS capped ~0.92 until subs finish, then 1.0 |
 | CDN 403 | Prefer WebView Chrome fetch via MediaFetchHost; tuned Origin/Referer for playlist vs segment |
+| HLS BYTERANGE / fMP4 | Download slices into discrete `init_*` / `seg_*` files; local playlist has no BYTERANGE; verify decoded size |
+| Segment integrity | Mismatched byte length vs range/Content-Length → fail download (never completed with truncated media) |
 
 ---
 

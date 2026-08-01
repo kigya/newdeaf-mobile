@@ -90,4 +90,22 @@ describe('prepareLocalPlaybackUri', () => {
     expect(written).toContain('file:///data/dl/seg0.ts');
     expect(written).toContain('#EXT-X-ENDLIST');
   });
+
+  it('strips BYTERANGE tags and MAP attributes for legacy copies', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockResolvedValue(
+      [
+        '#EXTM3U',
+        '#EXT-X-MAP:URI="init_0.mp4",BYTERANGE="100@0"',
+        '#EXTINF:1,',
+        '#EXT-X-BYTERANGE:200@100',
+        'seg_00001.mp4',
+      ].join('\n')
+    );
+    await prepareLocalPlaybackUri('file:///data/dl/index.m3u8', 'hls');
+    const written = writeAsStringAsync.mock.calls[0][1] as string;
+    expect(written).toContain('#EXT-X-MAP:URI="file:///data/dl/init_0.mp4"');
+    expect(written).not.toMatch(/BYTERANGE/i);
+    expect(written).toContain('file:///data/dl/seg_00001.mp4');
+  });
 });

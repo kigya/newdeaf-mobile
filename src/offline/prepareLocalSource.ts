@@ -58,11 +58,20 @@ export async function prepareLocalPlaybackUri(
     }
 
     if (trimmed.startsWith('#')) {
+      // Legacy offline copies may still declare BYTERANGE against full files.
+      // Sliced downloads strip these at write time; drop them defensively here.
+      if (/^#EXT-X-BYTERANGE:/i.test(trimmed)) {
+        continue;
+      }
       if (trimmed === '#EXT-X-ENDLIST') hasEndList = true;
       const mapMatch = trimmed.match(/URI="([^"]+)"/);
       if (mapMatch && (trimmed.includes('EXT-X-MAP') || trimmed.includes('EXT-X-KEY'))) {
         const abs = joinFileUri(dir, mapMatch[1]);
-        out.push(trimmed.replace(`URI="${mapMatch[1]}"`, `URI="${abs}"`));
+        const withoutRange = trimmed
+          .replace(/,BYTERANGE="[^"]*"/i, '')
+          .replace(/BYTERANGE="[^"]*",?/i, '')
+          .replace(/,\s*$/, '');
+        out.push(withoutRange.replace(`URI="${mapMatch[1]}"`, `URI="${abs}"`));
       } else {
         out.push(trimmed);
       }

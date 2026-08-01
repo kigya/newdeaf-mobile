@@ -31,9 +31,9 @@ export function MediaFetchHost() {
       return;
     }
 
-    registerMediaFetchInjector((id, url, mode) => {
+    registerMediaFetchInjector((id, url, mode, range) => {
       // String payload — iframe hook JSON.parses message data.
-      const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode });
+      const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode, range: range ?? null });
       const js = `(function(){try{var f=document.getElementById('nd-player');if(f&&f.contentWindow){f.contentWindow.postMessage(${JSON.stringify(payload)},'*');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:'no iframe'}));}}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:String(e&&e.message||e)}));}})();true;`;
       webRef.current?.injectJavaScript(js);
     }, 'host');
