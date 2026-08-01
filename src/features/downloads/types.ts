@@ -40,6 +40,8 @@ export type DownloadRequest = {
   subtitleLabel: string;
   hlsUrl: string;
   subtitleUrl: string;
+  /** Demuxed EXT-X-MEDIA audio playlist (embess); optional. */
+  audioPlaylistUrl?: string;
   season?: number;
   episode?: number;
 };

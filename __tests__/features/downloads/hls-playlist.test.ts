@@ -1,5 +1,6 @@
 import {
   base64DecodedLength,
+  buildDemuxMasterPlaylist,
   isByteRangeTag,
   parseByteRangeSpec,
   planHlsOfflineDownload,
@@ -146,5 +147,42 @@ describe('planHlsOfflineDownload', () => {
       byteRange: { offset: 0, length: 16 },
     });
     expect(jobs[1].localName).toBe('seg_00001.ts');
+  });
+
+  it('applies namePrefix to segment and init names', () => {
+    const { jobs, rewrittenLines } = planHlsOfflineDownload(
+      ['#EXTM3U', '#EXTINF:1,', 'a.ts'].join('\n'),
+      'https://cdn.example/path/index.m3u8',
+      'v_'
+    );
+    expect(jobs[0].localName).toBe('v_seg_00000.ts');
+    expect(rewrittenLines).toContain('v_seg_00000.ts');
+  });
+});
+
+describe('buildDemuxMasterPlaylist', () => {
+  it('emits audio media + stream-inf pointing at local files', () => {
+    const master = buildDemuxMasterPlaylist({
+      audioLabel: 'MovieDalen',
+      videoPlaylistFile: 'video.m3u8',
+      audioPlaylistFile: 'audio.m3u8',
+      bandwidth: 900000,
+      resolution: '1280x534',
+    });
+    expect(master).toContain('URI="audio.m3u8"');
+    expect(master).toContain('NAME="MovieDalen"');
+    expect(master).toContain('RESOLUTION=1280x534');
+    expect(master).toContain('video.m3u8');
+  });
+
+  it('escapes quotes in audio label and uses defaults', () => {
+    const master = buildDemuxMasterPlaylist({
+      audioLabel: 'Foo"Bar',
+      videoPlaylistFile: 'video.m3u8',
+      audioPlaylistFile: 'audio.m3u8',
+    });
+    expect(master).toContain('NAME="FooBar"');
+    expect(master).toContain('BANDWIDTH=1000000');
+    expect(master).toContain('RESOLUTION=1280x720');
   });
 });

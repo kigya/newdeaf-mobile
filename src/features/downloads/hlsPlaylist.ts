@@ -57,10 +57,13 @@ function mediaExt(abs: string, isKey: boolean): string {
 /**
  * Plan offline jobs from a media playlist: materialize BYTERANGE into discrete
  * local files and emit a playlist without BYTERANGE tags.
+ * @param namePrefix optional prefix for local segment names (e.g. `v_` / `a_`) so
+ *   demuxed video+audio can share one download directory without collisions.
  */
 export function planHlsOfflineDownload(
   playlistContent: string,
-  variantUrl: string
+  variantUrl: string,
+  namePrefix = ''
 ): PlannedHlsOffline {
   const lines = playlistContent
     .split(/\r?\n/)
@@ -87,7 +90,9 @@ export function planHlsOfflineDownload(
         const attrRange = line.match(/BYTERANGE="([^"]+)"/i)?.[1];
         const byteRange = attrRange ? parseByteRangeSpec(attrRange) : null;
         const ext = mediaExt(abs, isKey);
-        const localName = isKey ? `key_${mediaIndex}.${ext}` : `init_${mediaIndex}.${ext}`;
+        const localName = isKey
+          ? `${namePrefix}key_${mediaIndex}.${ext}`
+          : `${namePrefix}init_${mediaIndex}.${ext}`;
         jobs.push({
           remoteUrl: abs,
           localName,
@@ -104,7 +109,7 @@ export function planHlsOfflineDownload(
 
     const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, line));
     const ext = abs.includes('.m4s') ? 'm4s' : abs.includes('.mp4') ? 'mp4' : 'ts';
-    const localName = `seg_${String(mediaIndex).padStart(5, '0')}.${ext}`;
+    const localName = `${namePrefix}seg_${String(mediaIndex).padStart(5, '0')}.${ext}`;
     jobs.push({
       remoteUrl: abs,
       localName,
@@ -120,6 +125,29 @@ export function planHlsOfflineDownload(
   }
 
   return { jobs, rewrittenLines: rewritten };
+}
+
+/**
+ * Local multi-rendition master for demuxed video + selected audio playlists.
+ */
+export function buildDemuxMasterPlaylist(opts: {
+  audioLabel: string;
+  videoPlaylistFile: string;
+  audioPlaylistFile: string;
+  bandwidth?: number;
+  resolution?: string;
+}): string {
+  const bandwidth = opts.bandwidth && opts.bandwidth > 0 ? opts.bandwidth : 1_000_000;
+  const resolution = opts.resolution?.trim() || '1280x720';
+  const label = opts.audioLabel.replace(/"/g, '');
+  return [
+    '#EXTM3U',
+    '#EXT-X-VERSION:3',
+    `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="${label}",DEFAULT=YES,AUTOSELECT=YES,URI="${opts.audioPlaylistFile}"`,
+    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution},CODECS="avc1.64001f,mp4a.40.2",AUDIO="aud"`,
+    opts.videoPlaylistFile,
+    '',
+  ].join('\n');
 }
 
 /** Expected decoded byte length of a standard base64 string. */

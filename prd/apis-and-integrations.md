@@ -38,6 +38,7 @@
 - EN/Latin search: if locale is `en` **or** query has no Cyrillic → `resolveRussianTitleForSearch` (TMDB); if bridged search empty → retry original query.
 - Detail: og:title, poster candidates, KP/IMDB, plot `#fltxt`, trailer YouTube embed, player iframe scoring.
 - Player pick: score native balancers (`stloadi.live`, `stravers.live`, `biorn-as.*`, `:9443`); demote preroll (−80); prefer `token_movie`, season, stravers > stloadi > biorn. Else third-party embeds.
+- Non-native **embess** download resolve: `src/data/catalog/embedStreams.ts` — fetch embed HTML, parse `makePlayer` `source.{hls,audio,cc}`, fetch master m3u8, map audio names → `HlsSource.audioId` (demuxed audio playlist URI), VTT captions → `tracks`.
 - `pickEpisodeEntry`: preferred translation → “Субтитры” / `id_translation === 79` → first.
 - CDN host rewrite: `newdeaf.site` → `BASE_URL` in `absolutize` (403 workaround).
 

@@ -17,6 +17,10 @@ import { WebView } from 'react-native-webview';
 
 import { fetchMovieDetail, fetchPlayerFileList } from '@/src/data/catalog/catalog';
 import {
+  isResolvableEmbedUrl,
+  resolveEmbedStream,
+} from '@/src/data/catalog/embedStreams';
+import {
   enrichFromKinopoisk,
   type KinopoiskEnrichment,
 } from '@/src/data/catalog/kinopoisk';
@@ -153,8 +157,8 @@ export default function MovieDetailScreen() {
           });
 
         if (detail.playerUrl) {
-          setStreamLoading(detail.nativePlayer !== false);
           if (detail.nativePlayer !== false) {
+            setStreamLoading(true);
             const fl = await fetchPlayerFileList(detail.playerUrl);
             if (!cancelled && fl) {
               setFileList(fl);
@@ -177,6 +181,26 @@ export default function MovieDetailScreen() {
                   setEpisode(e);
                 }
               }
+            }
+          } else if (isResolvableEmbedUrl(detail.playerUrl)) {
+            setStreamLoading(true);
+            setStreamError(null);
+            try {
+              const embed = await resolveEmbedStream(detail.playerUrl);
+              /* istanbul ignore next -- unmount during embed resolve */
+              if (cancelled) return;
+              if (embed?.hlsSource?.length) {
+                setStream(embed);
+                setStreamError(null);
+              } else {
+                setStreamError(t('movie.tracksUnavailable'));
+              }
+              setStreamLoading(false);
+            } catch {
+              /* istanbul ignore next -- unmount during embed resolve */
+              if (cancelled) return;
+              setStreamError(t('movie.tracksUnavailable'));
+              setStreamLoading(false);
             }
           } else {
             setStreamLoading(false);
@@ -302,13 +326,17 @@ export default function MovieDetailScreen() {
 
   useEffect(() => {
     if (!activePlayerUrl) return;
-    setStream(null);
-    setStreamError(null);
     if (movie?.nativePlayer === false) {
-      setStreamLoading(false);
-      setStreamError(t('movie.tracksUnavailable'));
+      if (!isResolvableEmbedUrl(activePlayerUrl)) {
+        setStream(null);
+        setStreamLoading(false);
+        setStreamError(t('movie.tracksUnavailable'));
+      }
+      // Resolvable embeds: stream is filled by detail-load effect.
       return;
     }
+    setStream(null);
+    setStreamError(null);
     setStreamLoading(true);
   }, [activePlayerUrl, movie?.nativePlayer]);
 
@@ -788,7 +816,7 @@ export default function MovieDetailScreen() {
             colors={['transparent', colors.bg]}
             style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}
           >
-            {movie.nativePlayer === false ? (
+            {movie.nativePlayer === false && !stream?.hlsSource?.length ? (
               <Text style={styles.downloadHint}>{t('movie.downloadUnavailable')}</Text>
             ) : null}
             <View style={styles.ctaRow}>
@@ -803,10 +831,12 @@ export default function MovieDetailScreen() {
                 style={[
                   styles.btn,
                   styles.btnSecondary,
-                  (!activePlayerUrl || movie.nativePlayer === false) && styles.btnDisabled,
+                  (!activePlayerUrl ||
+                    (movie.nativePlayer === false && !stream?.hlsSource?.length)) &&
+                    styles.btnDisabled,
                 ]}
                 onPress={() => {
-                  if (movie.nativePlayer === false) return;
+                  if (movie.nativePlayer === false && !stream?.hlsSource?.length) return;
                   setDownloadOpen(true);
                 }}
               >
@@ -826,6 +856,7 @@ export default function MovieDetailScreen() {
               title={displayTitle}
               posterUrl={movie.posterUrl}
               playerUrl={activePlayerUrl}
+              initialStream={stream}
               season={isSerial ? season : undefined}
               episode={isSerial ? episode : undefined}
             />

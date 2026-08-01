@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Keyboard, Platform } from 'react-native';
 
 import { DownloadSheet } from '@/src/shared/ui/DownloadSheet';
@@ -21,11 +21,18 @@ jest.mock('@/src/features/downloads/store', () => ({
 }));
 
 let mockPreferredDownloadQuality = '720';
+const mockResolveEmbedStream = jest.fn(async (_url?: string): Promise<unknown> => null);
+const mockIsResolvableEmbedUrl = jest.fn((_url?: string) => false);
 
 jest.mock('@/src/features/settings/store', () => ({
   useSettingsStore: jest.fn((selector: (s: Record<string, unknown>) => unknown) =>
     selector({ preferredDownloadQuality: mockPreferredDownloadQuality })
   ),
+}));
+
+jest.mock('@/src/data/catalog/embedStreams', () => ({
+  isResolvableEmbedUrl: (url: string) => mockIsResolvableEmbedUrl(url),
+  resolveEmbedStream: (url: string) => mockResolveEmbedStream(url),
 }));
 
 jest.mock('@/src/features/playback/StreamResolver', () => ({
@@ -163,6 +170,8 @@ describe('DownloadSheet', () => {
     jest.clearAllMocks();
     mockDownloadItems = [];
     mockPreferredDownloadQuality = '720';
+    mockIsResolvableEmbedUrl.mockReturnValue(false);
+    mockResolveEmbedStream.mockResolvedValue(null);
   });
 
   it('returns null when not visible', async () => {
@@ -498,16 +507,129 @@ describe('DownloadSheet', () => {
       expect(screen.getByText(t('downloadSheet.noSubtitles'))).toBeTruthy()
     );
   });
+
+  it('uses initialStream without StreamResolver', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://api.embess.ws/embed/1"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'MovieDalen',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('MovieDalen')).toBeTruthy());
+    expect(screen.queryByTestId('sheet-resolve')).toBeNull();
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(mockEnqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audioPlaylistUrl: 'https://cdn/a1.m3u8',
+          audioLabel: 'MovieDalen',
+        })
+      )
+    );
+  });
+
+  it('resolves embed playerUrl via resolveEmbedStream', async () => {
+    mockIsResolvableEmbedUrl.mockReturnValue(true);
+    mockResolveEmbedStream.mockResolvedValue({
+      hlsSource: [{ label: 'LostFilm', quality: { '720': 'https://cdn/m.m3u8' } }],
+      tracks: [{ kind: 'captions', label: 'EN', src: 'https://cdn/en.vtt' }],
+    });
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://api.embess.ws/embed/1"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('LostFilm')).toBeTruthy());
+    expect(mockResolveEmbedStream).toHaveBeenCalled();
+  });
+
+  it('shows empty error when embed resolve returns nothing', async () => {
+    mockIsResolvableEmbedUrl.mockReturnValue(true);
+    mockResolveEmbedStream.mockResolvedValue(null);
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://api.embess.ws/embed/1"
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.emptyStreams'))).toBeTruthy()
+    );
+  });
+
+  it('shows error when embed resolve throws', async () => {
+    mockIsResolvableEmbedUrl.mockReturnValue(true);
+    mockResolveEmbedStream.mockRejectedValue(new Error('boom'));
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://api.embess.ws/embed/1"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('boom')).toBeTruthy());
+  });
+
+  it('applies payload preferring russian subtitle', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+        initialStream={{
+          hlsSource: [{ label: 'A', quality: { '720': 'https://cdn/m.m3u8' } }],
+          tracks: [
+            { kind: 'captions', label: 'EN', src: 'https://cdn/en.vtt' },
+            { kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' },
+          ],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Рус. полные')).toBeTruthy());
+  });
 });
 
 describe('YoutubeDownloadSheet', () => {
   const onClose = jest.fn();
 
   beforeEach(() => {
+    cleanup();
     jest.clearAllMocks();
+    mockPreferredDownloadQuality = '720';
     mockExtractYoutubeVideoId.mockImplementation((url: string) =>
       url.includes('youtube.com') || url.includes('youtu.be') ? 'abc12345678' : null
     );
+    mockProbeYoutubeQualities.mockResolvedValue({
+      title: 'Cool Video',
+      qualities: [
+        { quality: '720', label: '720p' },
+        { quality: '1080', label: '1080p' },
+      ],
+    });
   });
 
   it('returns null when not visible', async () => {

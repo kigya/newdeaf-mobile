@@ -54,10 +54,13 @@ Users want to save streams (and optional YouTube sources) and watch them without
 | Subtitle default | Russian full → Russian → first (`pickSubtitleTrack`) |
 | fMP4 / `#EXT-X-BYTERANGE` | Materialize each range into a standalone local file; strip BYTERANGE from `index.m3u8` |
 | Truncated segment body | Reject size mismatch vs range length / Content-Length; fail job (do not mark completed) |
+| Embess demuxed HLS | Download selected video variant + `audioId` audio playlist; write local multi-rendition `index.m3u8` |
+| Embess CDN fetch | OkHttp with embess Referer; skip bnsi `MediaFetchHost` WebView |
 
 ## Technical context
 
 - Module: `src/features/downloads/{types,db,store,hls,hlsPlaylist}.ts` + progressive/youtube/match/mediaFetch
+- Embed resolve: `src/data/catalog/embedStreams.ts`
 - Offline: `src/features/playback/offline/` + `prepareLocalSource` (defensive BYTERANGE strip for legacy copies)
 - Skills: `newdeaf-playback`, `newdeaf-local-data`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)
