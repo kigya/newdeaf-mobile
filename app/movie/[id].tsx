@@ -17,6 +17,10 @@ import { WebView } from 'react-native-webview';
 
 import { fetchMovieDetail, fetchPlayerFileList } from '@/src/api/catalog';
 import {
+  enrichFromKinopoisk,
+  type KinopoiskEnrichment,
+} from '@/src/api/kinopoisk';
+import {
   buildPlayerUrl,
   listEpisodes,
   listSeasons,
@@ -63,6 +67,8 @@ export default function MovieDetailScreen() {
   const [episode, setEpisode] = useState(1);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [resumePrompt, setResumePrompt] = useState<WatchProgressRecord | null>(null);
+  const [kp, setKp] = useState<KinopoiskEnrichment | null>(null);
+  const [kpLoading, setKpLoading] = useState(false);
   const isFavorite = useFavoritesStore((s) =>
     id ? s.items.some((item) => item.id === id) : false
   );
@@ -78,6 +84,8 @@ export default function MovieDetailScreen() {
     setStreamError(null);
     setFileList(null);
     setResumePrompt(null);
+    setKp(null);
+    setKpLoading(false);
     void (async () => {
       try {
         const detail = await fetchMovieDetail(href || id);
@@ -116,6 +124,33 @@ export default function MovieDetailScreen() {
         setMovie(next);
         if (detail.season) setSeason(detail.season);
         if (detail.episode) setEpisode(detail.episode);
+
+        setKpLoading(true);
+        void enrichFromKinopoisk(
+          {
+            newdeafId: next.id,
+            title: next.title,
+            originalTitle: next.originalTitle,
+            year: next.year,
+            isSeries: next.isSeries,
+          },
+          (partial) => {
+            if (!cancelled) {
+              setKp(partial);
+              setKpLoading(false);
+            }
+          }
+        )
+          .then((enrichment) => {
+            if (!cancelled) setKp(enrichment);
+          })
+          .catch(() => {
+            // partial may already be shown
+          })
+          .finally(() => {
+            if (!cancelled) setKpLoading(false);
+          });
+
         if (detail.playerUrl) {
           setStreamLoading(detail.nativePlayer !== false);
           if (detail.nativePlayer !== false) {
@@ -390,6 +425,15 @@ export default function MovieDetailScreen() {
                     </View>
                   ) : null}
                 </View>
+                {kp?.awards?.length ? (
+                  <View style={styles.awardChips}>
+                    {kp.awards.map((award) => (
+                      <View key={award.name} style={styles.awardChip}>
+                        <Text style={styles.awardChipText}>{award.name}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 {movie.year || movie.country || movie.duration ? (
                   <Text style={styles.metaLine}>
                     {[movie.year, movie.country, movie.duration].filter(Boolean).join(' · ')}
@@ -405,6 +449,13 @@ export default function MovieDetailScreen() {
                 ) : null}
               </View>
             </View>
+
+            {kpLoading && !kp ? (
+              <View style={styles.kpLoading}>
+                <ActivityIndicator color={colors.accent} size="small" />
+                <Text style={styles.tracksHint}>{t('movie.loadingExtras')}</Text>
+              </View>
+            ) : null}
 
             {isSerial && fileList ? (
               <View style={styles.section}>
@@ -458,10 +509,149 @@ export default function MovieDetailScreen() {
               </View>
             ) : null}
 
-            {movie.actors.length ? (
+            {kp?.staff?.length ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.cast')}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.castRow}
+                >
+                  {kp.staff.map((person) => {
+                    const name = person.nameRu || person.nameEn || '';
+                    if (!name) return null;
+                    return (
+                      <View key={`${person.staffId}-${name}`} style={styles.castCard}>
+                        {person.posterUrl ? (
+                          <Image
+                            source={{ uri: person.posterUrl }}
+                            style={styles.castAvatar}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <View style={[styles.castAvatar, styles.castAvatarFallback]}>
+                            <Text style={styles.castAvatarLetter}>{name.slice(0, 1)}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.castName} numberOfLines={2}>
+                          {name}
+                        </Text>
+                        {person.description ? (
+                          <Text style={styles.castRole} numberOfLines={2}>
+                            {person.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : movie.actors.length ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>{t('movie.cast')}</Text>
                 <Text style={styles.body}>{movie.actors.join(', ')}</Text>
+              </View>
+            ) : null}
+
+            {kp?.facts?.length ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.facts')}</Text>
+                {kp.facts.map((fact, index) => (
+                  <View key={`${index}-${fact.text.slice(0, 24)}`} style={styles.factCard}>
+                    {fact.spoiler ? (
+                      <Text style={styles.factSpoiler}>{t('movie.spoiler')}</Text>
+                    ) : null}
+                    <Text style={styles.factText}>{fact.text}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {kp?.similar?.length ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.similar')}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.relatedRow}
+                >
+                  {kp.similar.map((item) => (
+                    <Pressable
+                      key={`sim-${item.id}`}
+                      style={styles.relatedCard}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/movie/[id]',
+                          params: {
+                            id: item.id,
+                            href: item.href,
+                            title: item.title,
+                            posterUrl: item.posterUrl ?? '',
+                          },
+                        })
+                      }
+                    >
+                      {item.posterUrl ? (
+                        <Image
+                          source={{ uri: item.posterUrl }}
+                          style={styles.relatedPoster}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={[styles.relatedPoster, styles.posterFallback]}>
+                          <Text style={styles.posterLetter}>{item.title.slice(0, 1)}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.relatedTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {kp?.related?.length ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('movie.related')}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.relatedRow}
+                >
+                  {kp.related.map((item) => (
+                    <Pressable
+                      key={`rel-${item.id}`}
+                      style={styles.relatedCard}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/movie/[id]',
+                          params: {
+                            id: item.id,
+                            href: item.href,
+                            title: item.title,
+                            posterUrl: item.posterUrl ?? '',
+                          },
+                        })
+                      }
+                    >
+                      {item.posterUrl ? (
+                        <Image
+                          source={{ uri: item.posterUrl }}
+                          style={styles.relatedPoster}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={[styles.relatedPoster, styles.posterFallback]}>
+                          <Text style={styles.posterLetter}>{item.title.slice(0, 1)}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.relatedTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </View>
             ) : null}
 
@@ -596,22 +786,34 @@ export default function MovieDetailScreen() {
             colors={['transparent', colors.bg]}
             style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}
           >
-            <Pressable
-              style={[styles.btn, styles.btnPrimary, !activePlayerUrl && styles.btnDisabled]}
-              disabled={!activePlayerUrl}
-              onPress={() => void onWatchPress()}
-            >
-              <Ionicons name="play" size={20} color={colors.black} />
-              <Text style={styles.btnPrimaryText}>{t('common.watch')}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, styles.btnSecondary, !activePlayerUrl && styles.btnDisabled]}
-              disabled={!activePlayerUrl}
-              onPress={() => setDownloadOpen(true)}
-            >
-              <Ionicons name="download-outline" size={20} color={colors.accent} />
-              <Text style={styles.btnSecondaryText}>{t('common.download')}</Text>
-            </Pressable>
+            {movie.nativePlayer === false ? (
+              <Text style={styles.downloadHint}>{t('movie.downloadUnavailable')}</Text>
+            ) : null}
+            <View style={styles.ctaRow}>
+              <Pressable
+                style={[styles.btn, styles.btnPrimary, !activePlayerUrl && styles.btnDisabled]}
+                disabled={!activePlayerUrl}
+                onPress={() => void onWatchPress()}
+              >
+                <Ionicons name="play" size={20} color={colors.black} />
+                <Text style={styles.btnPrimaryText}>{t('common.watch')}</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.btn,
+                  styles.btnSecondary,
+                  (!activePlayerUrl || movie.nativePlayer === false) && styles.btnDisabled,
+                ]}
+                disabled={!activePlayerUrl || movie.nativePlayer === false}
+                onPress={() => {
+                  if (movie.nativePlayer === false) return;
+                  setDownloadOpen(true);
+                }}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.accent} />
+                <Text style={styles.btnSecondaryText}>{t('common.download')}</Text>
+              </Pressable>
+            </View>
           </LinearGradient>
 
           {downloadOpen && activePlayerUrl ? (
@@ -723,6 +925,107 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 12,
+  },
+  awardChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  awardChip: {
+    backgroundColor: colors.bgMuted,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  awardChipText: {
+    color: colors.accent,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+  },
+  kpLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  castRow: {
+    gap: spacing.md,
+    paddingRight: spacing.lg,
+  },
+  castCard: {
+    width: 96,
+  },
+  castAvatar: {
+    width: 96,
+    height: 128,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgMuted,
+    marginBottom: spacing.xs,
+  },
+  castAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  castAvatarLetter: {
+    color: colors.accent,
+    fontFamily: fonts.bold,
+    fontSize: 28,
+  },
+  castName: {
+    color: colors.text,
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  castRole: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  factCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  factSpoiler: {
+    color: colors.danger,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    marginBottom: spacing.xs,
+  },
+  factText: {
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  relatedRow: {
+    gap: spacing.md,
+    paddingRight: spacing.lg,
+  },
+  relatedCard: {
+    width: 110,
+  },
+  relatedPoster: {
+    width: 110,
+    height: 160,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgMuted,
+    marginBottom: spacing.xs,
+  },
+  relatedTitle: {
+    color: colors.text,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
   },
   metaLine: {
     color: colors.textSecondary,
@@ -876,10 +1179,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: 'row',
-    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
+    gap: spacing.sm,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   btn: {
     flex: 1,
@@ -900,6 +1206,13 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.45,
+  },
+  downloadHint: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   btnPrimaryText: {
     color: colors.black,

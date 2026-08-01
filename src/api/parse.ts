@@ -14,7 +14,13 @@ export function parseMovieIdFromHref(href: string): { id: string; slug: string; 
 }
 
 function titleFromSlug(slug: string): string {
-  return decodeURIComponent(slug)
+  let decoded = slug;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    // Invalid % encoding — keep raw slug.
+  }
+  return decoded
     .replace(/-/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
