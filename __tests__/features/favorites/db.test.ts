@@ -98,8 +98,37 @@ describe('favorites db', () => {
       expect.arrayContaining(['9', 's', 'T', null, null, '/9.html', null, null, 0, 1])
     );
 
+    await mod.upsertFavorite({
+      id: '10',
+      slug: 's2',
+      title: 'Series',
+      href: '/10.html',
+      isSeries: true,
+      createdAt: 2,
+    });
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO favorites'),
+      expect.arrayContaining(['10', 's2', 'Series', null, null, '/10.html', null, null, 1, 2])
+    );
+
     await mod.deleteFavoriteRow('9');
     expect(mockDb.runAsync).toHaveBeenCalledWith('DELETE FROM favorites WHERE id = ?', ['9']);
+  });
+
+  it('maps null isSeries via default', async () => {
+    const { mod, mockDb } = loadDb();
+    mockDb.getAllAsync.mockResolvedValue([
+      {
+        id: '3',
+        slug: 'x',
+        title: 'X',
+        href: '/3.html',
+        isSeries: null,
+        createdAt: 1,
+      },
+    ]);
+    const rows = await mod.listFavorites();
+    expect(rows[0].isSeries).toBe(false);
   });
 
   it('creates table on first open and reuses db', async () => {

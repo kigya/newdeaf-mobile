@@ -39,3 +39,18 @@ export function youtubeiHls(info: {
 }): string | undefined {
   return info.streaming_data?.hls_manifest_url;
 }
+
+export function firstStreamUrl(url: string | undefined, deciphered: string): string {
+  return url || deciphered;
+}
+
+/** Decipher a chooseFormat result when the direct url is empty. */
+export async function decipherStreamUrl(
+  decipher: () => Promise<string | undefined>
+): Promise<string> {
+  try {
+    return firstStreamUrl(undefined, (await decipher()) || '');
+  } catch {
+    return '';
+  }
+}

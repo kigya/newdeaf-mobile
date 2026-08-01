@@ -1,8 +1,10 @@
 import { Innertube } from 'youtubei.js/react-native';
 
 import { t } from '@/src/shared/i18n';
+import { toError } from '@/src/shared/lib/errorMessage';
 
 import type { DownloadMediaKind } from './types';
+import { parseHeightLabel, qualityOrDefault, resolveVideoTitle, pickLargestThumbUrl, pickYoutubeiPoster, youtubeiFormats, youtubeiHls, firstStreamUrl, decipherStreamUrl } from './youtubeMeta';
 
 const PIPED_INSTANCES = [
   'https://pipedapi.r4fo.com',
@@ -112,8 +114,7 @@ export function extractYoutubeVideoId(input: string): string | null {
 
 function parseQualityHeight(stream: PipedVideoStream): number {
   if (typeof stream.height === 'number' && stream.height > 0) return stream.height;
-  const fromQuality = Number(String(stream.quality ?? '').replace(/[^\d]/g, ''));
-  return Number.isFinite(fromQuality) ? fromQuality : 0;
+  return parseHeightLabel(stream.quality);
 }
 
 function uniqueSortedHeights(heights: number[]): number[] {
@@ -121,8 +122,7 @@ function uniqueSortedHeights(heights: number[]): number[] {
   return [...set].sort((a, b) => b - a);
 }
 
-function pickHeight(available: number[], preferred?: number): number | null {
-  if (!available.length) return null;
+function pickHeight(available: number[], preferred?: number): number {
   if (preferred && available.includes(preferred)) return preferred;
   for (const h of PREFERRED_ORDER) {
     if (available.includes(h)) return h;
@@ -141,9 +141,7 @@ function pickMuxedByHeight(candidates: MuxedCandidate[], preferred?: number): Mu
   if (!candidates.length) return null;
   const heights = candidates.map((c) => c.height);
   const chosen = pickHeight(heights, preferred);
-  if (chosen == null) return null;
-  const exact = candidates.find((c) => c.height === chosen);
-  return exact ?? candidates[0];
+  return candidates.find((c) => c.height === chosen)!;
 }
 
 async function fetchJson<T>(url: string, timeoutMs = 12000): Promise<T> {
@@ -168,7 +166,7 @@ async function fetchJson<T>(url: string, timeoutMs = 12000): Promise<T> {
 }
 
 function pipedMuxed(data: PipedStreamsResponse): MuxedCandidate[] {
-  return (data.videoStreams ?? [])
+  return (data.videoStreams || [])
     .filter((s) => !s.videoOnly && typeof s.url === 'string' && s.url.length > 0)
     .map((s) => ({
       height: parseQualityHeight(s) || 0,
@@ -187,7 +185,7 @@ async function resolveFromPiped(
     throw new Error(data.error);
   }
 
-  const title = (data.title ?? '').trim() || `YouTube ${videoId}`;
+  const title = resolveVideoTitle(data.title, videoId);
   const posterUrl = data.thumbnailUrl || undefined;
   const muxed = pickMuxedByHeight(pipedMuxed(data), preferredHeight);
 
@@ -208,7 +206,7 @@ async function resolveFromPiped(
       videoId,
       title,
       posterUrl,
-      quality: String(preferredHeight && preferredHeight > 0 ? preferredHeight : 720),
+      quality: qualityOrDefault(preferredHeight),
       mediaKind: 'hls',
       streamUrl: data.hls,
       youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
@@ -229,7 +227,7 @@ async function probeFromPiped(instance: string, videoId: string): Promise<Youtub
   if (!heights.length) throw new Error(t('youtube.noStream'));
   return {
     videoId,
-    title: (data.title ?? '').trim() || `YouTube ${videoId}`,
+    title: resolveVideoTitle(data.title, videoId),
     posterUrl: data.thumbnailUrl || undefined,
     qualities: qualityOptionsFromHeights(heights),
     youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
@@ -240,7 +238,7 @@ function invidiousMuxed(streams: InvidiousFormatStream[]): MuxedCandidate[] {
   return streams
     .filter((s) => typeof s.url === 'string' && s.url.length > 0)
     .map((s) => ({
-      height: Number(String(s.qualityLabel ?? '').replace(/[^\d]/g, '')) || 0,
+      height: parseHeightLabel(s.qualityLabel),
       streamUrl: s.url as string,
     }))
     .filter((s) => s.height > 0);
@@ -256,12 +254,9 @@ async function resolveFromInvidious(
     throw new Error(data.error);
   }
 
-  const title = (data.title ?? '').trim() || `YouTube ${videoId}`;
-  const thumbs = [...(data.videoThumbnails ?? [])].sort(
-    (a, b) => (b.width ?? 0) - (a.width ?? 0)
-  );
-  const posterUrl = thumbs[0]?.url;
-  const muxed = pickMuxedByHeight(invidiousMuxed(data.formatStreams ?? []), preferredHeight);
+  const title = resolveVideoTitle(data.title, videoId);
+  const posterUrl = pickLargestThumbUrl(data.videoThumbnails);
+  const muxed = pickMuxedByHeight(invidiousMuxed(data.formatStreams || []), preferredHeight);
 
   if (muxed) {
     return {
@@ -280,7 +275,7 @@ async function resolveFromInvidious(
       videoId,
       title,
       posterUrl,
-      quality: String(preferredHeight && preferredHeight > 0 ? preferredHeight : 720),
+      quality: qualityOrDefault(preferredHeight),
       mediaKind: 'hls',
       streamUrl: data.hlsUrl,
       youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
@@ -293,19 +288,16 @@ async function resolveFromInvidious(
 async function probeFromInvidious(instance: string, videoId: string): Promise<YoutubeProbeResult> {
   const data = await fetchJson<InvidiousVideoResponse>(`${instance}/api/v1/videos/${videoId}`);
   if (data.error) throw new Error(data.error);
-  const muxed = invidiousMuxed(data.formatStreams ?? []);
+  const muxed = invidiousMuxed(data.formatStreams || []);
   const heights = muxed.map((m) => m.height);
   if (!heights.length && data.hlsUrl) {
     heights.push(720, 480, 360);
   }
   if (!heights.length) throw new Error(t('youtube.noStream'));
-  const thumbs = [...(data.videoThumbnails ?? [])].sort(
-    (a, b) => (b.width ?? 0) - (a.width ?? 0)
-  );
   return {
     videoId,
-    title: (data.title ?? '').trim() || `YouTube ${videoId}`,
-    posterUrl: thumbs[0]?.url,
+    title: resolveVideoTitle(data.title, videoId),
+    posterUrl: pickLargestThumbUrl(data.videoThumbnails),
     qualities: qualityOptionsFromHeights(heights),
     youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
   };
@@ -324,19 +316,21 @@ async function resolveFromYoutubei(
         generate_session_locally: true,
       });
       const info = await yt.getBasicInfo(videoId, { client });
-      const title = info.basic_info?.title?.trim() || `YouTube ${videoId}`;
-      const posterUrl = info.basic_info?.thumbnail?.[0]?.url;
+      const title = resolveVideoTitle(info.basic_info?.title, videoId);
+      const posterUrl = pickYoutubeiPoster(info);
 
-      const formats = info.streaming_data?.formats ?? [];
+      const formats = youtubeiFormats(info) as {
+        url?: string;
+        height?: number;
+        quality_label?: string;
+        decipher: (p: unknown) => Promise<string>;
+      }[];
       const withUrl: MuxedCandidate[] = [];
       for (const f of formats) {
         try {
           const streamUrl = f.url || (await f.decipher(yt.session.player));
           if (streamUrl) {
-            const height =
-              Number(f.height) ||
-              Number(String(f.quality_label ?? '').replace(/[^\d]/g, '')) ||
-              0;
+            const height = Number(f.height) || parseHeightLabel(f.quality_label) || 0;
             if (height > 0) {
               withUrl.push({ height, streamUrl });
             }
@@ -361,33 +355,32 @@ async function resolveFromYoutubei(
 
       try {
         const fmt = info.chooseFormat({ type: 'video+audio', quality: 'bestefficiency' });
-        const streamUrl = fmt.url || (await fmt.decipher(yt.session.player));
-        if (streamUrl) {
-          const height =
-            Number(String(fmt.quality_label ?? '').replace(/[^\d]/g, '')) ||
-            Number(fmt.height) ||
-            240;
-          return {
-            videoId,
-            title,
-            posterUrl,
-            quality: String(height),
-            mediaKind: 'progressive',
-            streamUrl,
-            youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
-          };
+        let streamUrl = firstStreamUrl(fmt.url, '');
+        if (!streamUrl) {
+          streamUrl = await decipherStreamUrl(() => fmt.decipher(yt.session.player));
         }
+        if (!streamUrl) throw new Error(t('youtube.noStream'));
+        const height = parseHeightLabel(fmt.quality_label) || Number(fmt.height) || 240;
+        return {
+          videoId,
+          title,
+          posterUrl,
+          quality: String(height),
+          mediaKind: 'progressive',
+          streamUrl,
+          youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        };
       } catch {
         // no muxed chooseFormat
       }
 
-      const hls = info.streaming_data?.hls_manifest_url;
+      const hls = youtubeiHls(info);
       if (hls) {
         return {
           videoId,
           title,
           posterUrl,
-          quality: String(preferredHeight && preferredHeight > 0 ? preferredHeight : 720),
+          quality: qualityOrDefault(preferredHeight),
           mediaKind: 'hls',
           streamUrl: hls,
           youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
@@ -396,11 +389,11 @@ async function resolveFromYoutubei(
 
       throw new Error(t('youtube.noStream'));
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
-  throw lastError ?? new Error(t('youtube.noStream'));
+  throw lastError!;
 }
 
 async function probeFromYoutubei(videoId: string): Promise<YoutubeProbeResult> {
@@ -411,15 +404,17 @@ async function probeFromYoutubei(videoId: string): Promise<YoutubeProbeResult> {
     try {
       const yt = await Innertube.create({ generate_session_locally: true });
       const info = await yt.getBasicInfo(videoId, { client });
-      const title = info.basic_info?.title?.trim() || `YouTube ${videoId}`;
-      const posterUrl = info.basic_info?.thumbnail?.[0]?.url;
+      const title = resolveVideoTitle(info.basic_info?.title, videoId);
+      const posterUrl = pickYoutubeiPoster(info);
       const heights: number[] = [];
-      for (const f of info.streaming_data?.formats ?? []) {
-        const height =
-          Number(f.height) || Number(String(f.quality_label ?? '').replace(/[^\d]/g, '')) || 0;
+      for (const f of youtubeiFormats(info) as {
+        height?: number;
+        quality_label?: string;
+      }[]) {
+        const height = Number(f.height) || parseHeightLabel(f.quality_label) || 0;
         if (height > 0) heights.push(height);
       }
-      if (!heights.length && info.streaming_data?.hls_manifest_url) {
+      if (!heights.length && youtubeiHls(info)) {
         heights.push(720, 480, 360);
       }
       if (!heights.length) throw new Error(t('youtube.noStream'));
@@ -431,11 +426,11 @@ async function probeFromYoutubei(videoId: string): Promise<YoutubeProbeResult> {
         youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
       };
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
-  throw lastError ?? new Error(t('youtube.noStream'));
+  throw lastError!;
 }
 
 export async function probeYoutubeQualities(youtubeUrl: string): Promise<YoutubeProbeResult> {
@@ -450,7 +445,7 @@ export async function probeYoutubeQualities(youtubeUrl: string): Promise<Youtube
     try {
       return await probeFromPiped(instance, videoId);
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
@@ -458,21 +453,17 @@ export async function probeYoutubeQualities(youtubeUrl: string): Promise<Youtube
     try {
       return await probeFromInvidious(instance, videoId);
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
   try {
     return await probeFromYoutubei(videoId);
   } catch (e) {
-    lastError = e instanceof Error ? e : new Error(String(e));
+    lastError = toError(e);
   }
 
-  throw new Error(
-    lastError?.message
-      ? t('youtube.streamFailed', { reason: lastError.message })
-      : t('youtube.streamFailedGeneric')
-  );
+  throw new Error(t('youtube.streamFailed', { reason: lastError!.message }));
 }
 
 export async function resolveYoutubeStream(
@@ -498,7 +489,7 @@ export async function resolveYoutubeStream(
     try {
       return await resolveFromPiped(instance, videoId, preferred);
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
@@ -506,19 +497,15 @@ export async function resolveYoutubeStream(
     try {
       return await resolveFromInvidious(instance, videoId, preferred);
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
+      lastError = toError(e);
     }
   }
 
   try {
     return await resolveFromYoutubei(videoId, preferred);
   } catch (e) {
-    lastError = e instanceof Error ? e : new Error(String(e));
+    lastError = toError(e);
   }
 
-  throw new Error(
-    lastError?.message
-      ? t('youtube.streamFailed', { reason: lastError.message })
-      : t('youtube.streamFailedGeneric')
-  );
+  throw new Error(t('youtube.streamFailed', { reason: lastError!.message }));
 }

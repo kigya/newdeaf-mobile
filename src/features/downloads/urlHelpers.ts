@@ -18,11 +18,10 @@ export function resolveUrl(base: string, relative: string): string {
 export function mediaUrlCandidates(url: string): string[] {
   const trimmed = url.trim();
   if (!trimmed) return [];
-  const parts = trimmed
+  return trimmed
     .split(/\s+or\s+/i)
     .map((p) => p.trim())
     .filter(Boolean);
-  return parts.length ? parts : [trimmed];
 }
 
 /**

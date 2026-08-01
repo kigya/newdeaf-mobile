@@ -43,6 +43,34 @@ Hi
   it('skips NOTE and empty text', () => {
     expect(parseVtt('WEBVTT\n\nNOTE foo\n\n00:00:01.000 --> 00:00:02.000\n')).toEqual([]);
   });
+
+  it('parses MM:SS timestamps and bare seconds', () => {
+    const cues = parseVtt(`WEBVTT
+
+01:30.500 --> 02:00.000
+Mid
+
+NOTE skip
+
+orphan block without arrow
+
+9.5 --> 10
+Short
+
+bad --> also
+Zero
+`);
+    expect(cues[0].start).toBe(90.5);
+    expect(cues[0].end).toBe(120);
+    expect(cues[1].start).toBe(9.5);
+    expect(cues[1].text).toBe('Short');
+    expect(cues[2].start).toBe(0);
+  });
+
+  it('skips empty blocks and invalid timestamps', () => {
+    expect(parseVtt('WEBVTT\n\n\n\n')).toEqual([]);
+    expect(parseVtt('WEBVTT\n\njust text\nno times\n')).toEqual([]);
+  });
 });
 
 describe('ensureFileUri', () => {
@@ -50,6 +78,7 @@ describe('ensureFileUri', () => {
     expect(ensureFileUri('/data/a.mp4')).toBe('file:///data/a.mp4');
     expect(ensureFileUri('file:///data/a.mp4')).toBe('file:///data/a.mp4');
     expect(ensureFileUri('')).toBe('');
+    expect(ensureFileUri('relative.mp4')).toBe('relative.mp4');
   });
 });
 
@@ -107,5 +136,46 @@ describe('prepareLocalPlaybackUri', () => {
     expect(written).toContain('#EXT-X-MAP:URI="file:///data/dl/init_0.mp4"');
     expect(written).not.toMatch(/BYTERANGE/i);
     expect(written).toContain('file:///data/dl/seg_00001.mp4');
+  });
+
+  it('keeps blank lines, absolute URIs, existing ENDLIST, and KEY URI rewrite', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockResolvedValue(
+      [
+        '#EXTM3U',
+        '',
+        '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"',
+        '#EXT-X-ENDLIST',
+        'file:///data/dl/abs.ts',
+        'https://cdn/remote.ts',
+        './rel.ts',
+      ].join('\n')
+    );
+    await prepareLocalPlaybackUri('/data/dl/index.m3u8?x=1', 'hls');
+    const written = writeAsStringAsync.mock.calls[0][1] as string;
+    expect(written).toContain('#EXT-X-KEY:METHOD=AES-128,URI="file:///data/dl/key.bin"');
+    expect(written).toContain('file:///data/dl/abs.ts');
+    expect(written).toContain('https://cdn/remote.ts');
+    expect(written).toContain('file:///data/dl/rel.ts');
+    expect(written.match(/#EXT-X-ENDLIST/g)).toHaveLength(1);
+  });
+
+  it('joins when directory uri lacks trailing slash and handles query', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockResolvedValue(
+      ['#EXTM3U', '#EXTINF:1,', 'seg.ts', '#EXT-X-ENDLIST', ''].join('\n')
+    );
+    const out = await prepareLocalPlaybackUri('file:///data/dl/index.m3u8?cache=1', 'hls');
+    expect(out).toBe('file:///data/dl/index.absolute.m3u8');
+    const written = writeAsStringAsync.mock.calls[0][1] as string;
+    expect(written).toContain('file:///data/dl/seg.ts');
+  });
+
+  it('rewrites relative segments when playlist path has no slash', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockResolvedValue('#EXTM3U\n#EXTINF:1,\nseg.ts\n#EXT-X-ENDLIST\n');
+    await prepareLocalPlaybackUri('noslash', 'hls');
+    const written = writeAsStringAsync.mock.calls[0][1] as string;
+    expect(written).toContain('noslash/seg.ts');
   });
 });

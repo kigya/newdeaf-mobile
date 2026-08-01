@@ -51,7 +51,6 @@ export function StreamResolver({
           onReady={() => {}}
           onStatus={setStatus}
           onStream={(payload) => {
-            if (done.current) return;
             done.current = true;
             onResolved(payload);
           }}

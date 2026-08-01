@@ -18,6 +18,12 @@ import {
   resolveUrl,
 } from '@/src/features/downloads/urlHelpers';
 import { errorMessage } from '@/src/shared/lib/errorMessage';
+import {
+  coalesceSize,
+  coalesceStatus,
+  matchAttr,
+  orPreferred,
+} from '@/src/features/downloads/hlsNumbers';
 
 export {
   base64DecodedLength,
@@ -114,7 +120,7 @@ function assertBinarySize(
   }
 }
 
-async function downloadWithRetry(
+export async function downloadWithRetry(
   remoteUrl: string,
   destPath: string,
   headers: Record<string, string>,
@@ -131,7 +137,7 @@ async function downloadWithRetry(
   // a failed WebView transfer would otherwise be reported as a misleading OkHttp 403.
   if (isMediaFetchReady()) {
     let lastStatus = 0;
-    let lastError = '';
+    let lastError = `${errorLabel}: webview`;
     for (let attempt = 0; attempt <= SEGMENT_RETRY_BACKOFF_MS.length; attempt++) {
       if (attempt > 0) await sleep(SEGMENT_RETRY_BACKOFF_MS[attempt - 1]);
       try {
@@ -160,7 +166,7 @@ async function downloadWithRetry(
         lastError = e instanceof Error ? e.message : String(e);
       }
     }
-    throw new Error(lastError || `${errorLabel}: ${lastStatus || 'webview'}`);
+    throw new Error(lastError);
   }
 
   const withRange = (base: Record<string, string>): Record<string, string> =>
@@ -186,10 +192,10 @@ async function downloadWithRetry(
         // ignore
       }
       const result = await FileSystem.downloadAsync(remoteUrl, destPath, { headers: headerSet });
-      lastStatus = result.status ?? 0;
+      lastStatus = coalesceStatus(result.status);
       if (lastStatus >= 200 && lastStatus < 300) {
         const info = await FileSystem.getInfoAsync(destPath);
-        const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
+        const size = info.exists && 'size' in info ? coalesceSize(info.size) : 0;
         try {
           assertBinarySize(size, byteRange?.length, null);
           return;
@@ -246,28 +252,27 @@ async function fetchText(url: string, playerUrl?: string): Promise<string> {
         lastError = `Failed to fetch playlist: ${lastStatus || 'invalid'}`;
         continue;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        lastError = msg;
-        const statusMatch = msg.match(/Failed to fetch playlist: (\d+)/);
+        lastError = errorMessage(e, String(e));
+        const statusMatch = lastError.match(/Failed to fetch playlist: (\d+)/);
         if (statusMatch) lastStatus = Number(statusMatch[1]);
         continue;
       }
     }
 
     const headers = mediaRequestHeaders(playerUrl);
-    const tmpBase = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+    const tmpBase = FileSystem.cacheDirectory || FileSystem.documentDirectory;
     if (!tmpBase) continue;
     const tmpPath = `${tmpBase}playlist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.m3u8`;
     try {
       await FileSystem.deleteAsync(tmpPath, { idempotent: true });
       const result = await FileSystem.downloadAsync(candidate, tmpPath, { headers });
-      lastStatus = result.status ?? 0;
+      lastStatus = coalesceStatus(result.status);
       if (lastStatus >= 200 && lastStatus < 300) {
         const text = await FileSystem.readAsStringAsync(tmpPath);
         if (/#EXTM3U|#EXTINF|#EXT-X-/i.test(text)) return text;
         if (/403 Forbidden/i.test(text)) lastStatus = 403;
       }
-      lastError = `Failed to fetch playlist: ${lastStatus || 'network'}`;
+      lastError = `Failed to fetch playlist: ${lastStatus}`;
     } catch (e) {
       lastError = errorMessage(e, `Failed to fetch playlist: network`);
     } finally {
@@ -287,8 +292,8 @@ export async function resolveVariantPlaylist(
   preferredHeight: number,
   playerUrl?: string
 ): Promise<{ url: string; content: string }> {
+  const content = await fetchText(m3u8Url, playerUrl);
   const primary = pickPrimaryMediaUrl(m3u8Url);
-  const content = await fetchText(primary, playerUrl);
   if (!content.includes('#EXT-X-STREAM-INF')) {
     return { url: primary, content };
   }
@@ -301,8 +306,8 @@ export async function resolveVariantPlaylist(
     if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
     const next = lines[i + 1];
     if (!next || next.startsWith('#')) continue;
-    const bandwidth = Number(line.match(/BANDWIDTH=(\d+)/i)?.[1] ?? 0);
-    const height = Number(line.match(/RESOLUTION=\d+x(\d+)/i)?.[1] ?? 0);
+    const bandwidth = matchAttr(line, /BANDWIDTH=(\d+)/i);
+    const height = matchAttr(line, /RESOLUTION=\d+x(\d+)/i);
     variants.push({ bandwidth, height, uri: pickPrimaryMediaUrl(resolveUrl(primary, next)) });
   }
 
@@ -311,8 +316,8 @@ export async function resolveVariantPlaylist(
   }
 
   variants.sort((a, b) => {
-    const da = Math.abs((a.height || preferredHeight) - preferredHeight);
-    const db = Math.abs((b.height || preferredHeight) - preferredHeight);
+    const da = Math.abs(orPreferred(a.height, preferredHeight) - preferredHeight);
+    const db = Math.abs(orPreferred(b.height, preferredHeight) - preferredHeight);
     if (da !== db) return da - db;
     return b.bandwidth - a.bandwidth;
   });
@@ -370,7 +375,7 @@ export async function downloadHlsToDirectory(
       slice.map(async (job) => {
         const filePath = `${targetDir}${job.localName}`;
         const info = await FileSystem.getInfoAsync(filePath);
-        const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
+        const size = info.exists && 'size' in info ? coalesceSize(info.size) : 0;
         const expected = job.byteRange?.length;
         const ok = size > 0 && (expected == null || size === expected);
         return { job, exists: ok };

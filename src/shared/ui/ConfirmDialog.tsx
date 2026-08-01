@@ -31,7 +31,7 @@ export function ConfirmDialog({
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-      <Pressable style={styles.backdrop} onPress={onCancel} />
+      <Pressable style={styles.backdrop} onPress={onCancel} testID="confirm-dialog-backdrop" />
       <View style={styles.card}>
         <Text style={styles.title}>{title}</Text>
         {message ? <Text style={styles.message}>{message}</Text> : null}

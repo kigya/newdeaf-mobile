@@ -143,6 +143,28 @@ describe('watch-progress db', () => {
     expect(record.isSeries).toBe(false);
   });
 
+  it('upsertWatchProgress without season/episode uses nulls', async () => {
+    const { mod, mockDb } = loadDb();
+    const record = await mod.upsertWatchProgress({
+      movieId: '10',
+      positionSec: 10,
+      title: 'T',
+      source: 'online',
+    });
+    expect(record.season).toBeUndefined();
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO watch_progress'),
+      expect.arrayContaining(['10', '10', null, null, 10])
+    );
+  });
+
+  it('maps null isSeries via default', async () => {
+    const { mod, mockDb } = loadDb();
+    mockDb.getAllAsync.mockResolvedValue([sampleRow({ isSeries: null })]);
+    const rows = await mod.listWatchProgress();
+    expect(rows[0].isSeries).toBe(false);
+  });
+
   it('deleteWatchProgress and deleteWatchProgressForEpisode', async () => {
     const { mod, mockDb } = loadDb();
     await mod.deleteWatchProgress('abc');

@@ -8,6 +8,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cueAtTime, parseVtt, type VttCue } from '@/src/features/playback/offline/vtt';
 import { ensureFileUri } from '@/src/features/playback/offline/prepareLocalSource';
+import {
+  resumePosition,
+  statusErrorMessage,
+  logIfDev,
+  warnIfDev,
+  runUnlessCancelled,
+  shouldSkipInitialSeek,
+  trySeekTo,
+  scheduleSeekRetries,
+  takePreserveTarget,
+  isFiniteNumber,
+  applyReadyToPlay,
+  forceSeekIfNeeded,
+  maybeScheduleSeek,
+  readFiniteTime,
+  shouldApplyParsedSubs,
+  whenFiniteTime,
+  handlePlayerStatus,
+  runInitialSeekMode,
+  assignSeekHandles,
+} from '@/src/features/playback/mediaPlayerHelpers';
 import { t } from '@/src/shared/i18n';
 import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, spacing } from '@/src/shared/theme';
@@ -97,21 +118,17 @@ export function MediaPlayer({
 
   useEffect(() => {
     // Debug aid for CDN header / URL issues on device.
-    if (__DEV__) {
-      console.log(
-        '[MediaPlayer] source',
-        uri.slice(0, 140),
-        headers ? Object.keys(headers).join(',') : 'no-headers'
-      );
-    }
+    logIfDev(
+      '[MediaPlayer] source',
+      uri.slice(0, 140),
+      headers ? Object.keys(headers).join(',') : 'no-headers'
+    );
   }, [uri, headers]);
 
   // Swap HLS source without remounting; restore playback position.
   useEffect(() => {
     if (uriRef.current === uri) return;
-    const resumeAt =
-      preservePositionRef.current ??
-      (typeof player.currentTime === 'number' ? player.currentTime : 0);
+    const resumeAt = resumePosition(preservePositionRef.current, player.currentTime);
     uriRef.current = uri;
     preservePositionRef.current = resumeAt;
     const next = buildSource(uri, contentType, headers);
@@ -122,44 +139,32 @@ export function MediaPlayer({
       try {
         setPlayerError(null);
         await player.replaceAsync(next);
-        if (cancelled) return;
-        wantPlayingRef.current = true;
-        player.play();
-        const target = preservePositionRef.current ?? 0;
-        preservePositionRef.current = null;
-        if (target > 1) {
-          const trySeek = () => {
-            try {
-              const duration = player.duration;
-              if (typeof duration === 'number' && duration > 0) {
-                player.currentTime = Math.min(target, Math.max(0, duration - 1));
-                return true;
-              }
-            } catch {
-              // ignore
-            }
-            return false;
-          };
-          if (!trySeek()) {
-            seekInterval = setInterval(() => {
-              if (trySeek() && seekInterval) clearInterval(seekInterval);
-            }, 200);
-            seekTimeout = setTimeout(() => {
-              if (seekInterval) clearInterval(seekInterval);
-            }, 5000);
-          }
-        }
+        runUnlessCancelled(cancelled, () => {
+          wantPlayingRef.current = true;
+          player.play();
+          const target = takePreserveTarget(preservePositionRef.current);
+          preservePositionRef.current = null;
+          const trySeek = () =>
+            trySeekTo(target, () => player.duration, (t) => {
+              player.currentTime = t;
+            });
+          const handles = maybeScheduleSeek(target, trySeek, scheduleSeekRetries);
+          assignSeekHandles(handles, (h) => {
+            seekInterval = h.seekInterval;
+            seekTimeout = h.seekTimeout;
+          });
+        });
       } catch (e) {
         preservePositionRef.current = null;
-        if (!cancelled) {
+        runUnlessCancelled(cancelled, () => {
           setPlayerError(errorMessage(e, t('offline.playbackError')));
-        }
+        });
       }
     })();
     return () => {
       cancelled = true;
-      if (seekInterval) clearInterval(seekInterval);
-      if (seekTimeout) clearTimeout(seekTimeout);
+      clearInterval(seekInterval as ReturnType<typeof setInterval>);
+      clearTimeout(seekTimeout as ReturnType<typeof setTimeout>);
     };
   }, [uri, contentType, headers, player]);
 
@@ -172,7 +177,7 @@ export function MediaPlayer({
     let durationSec: number | undefined;
     try {
       const d = player.duration;
-      if (typeof d === 'number' && d > 0 && !Number.isNaN(d)) durationSec = d;
+      if (isFiniteNumber(d) && d > 0) durationSec = d;
     } catch {
       // ignore
     }
@@ -185,103 +190,78 @@ export function MediaPlayer({
   });
 
   useEventListener(player, 'statusChange', ({ status, error }) => {
-    if (status === 'error') {
-      const message =
-        error && typeof error === 'object' && 'message' in error
-          ? String((error as { message?: string }).message ?? t('offline.playbackError'))
-          : t('offline.playbackError');
-      setPlayerError(message);
-      if (__DEV__) {
-        console.warn('[MediaPlayer] status error', error);
+    handlePlayerStatus(
+      status,
+      () => {
+        const message = statusErrorMessage(error, t('offline.playbackError'));
+        setPlayerError(message);
+        warnIfDev('[MediaPlayer] status error', error);
+      },
+      () => {
+        applyReadyToPlay(wantPlayingRef.current, () => player.play(), () => setPlayerError(null));
       }
-      return;
-    }
-    if (status === 'readyToPlay' && wantPlayingRef.current) {
-      setPlayerError(null);
-      try {
-        player.play();
-      } catch {
-        // ignore
-      }
-    }
+    );
   });
 
   useEventListener(player, 'playingChange', ({ isPlaying }) => {
-    if (isPlaying) {
-      wantPlayingRef.current = true;
-      return;
-    }
-    // Native controls pause must win — do not auto-resume on playing=false.
-    // readyToPlay + wantPlayingRef still restarts after source swaps / errors.
-    wantPlayingRef.current = false;
+    wantPlayingRef.current = !!isPlaying;
   });
 
   useEffect(() => {
     const id = setInterval(() => {
-      try {
-        const time = player.currentTime;
-        if (typeof time === 'number' && !Number.isNaN(time)) {
-          setCurrentTime(time);
-          reportProgress(time);
-        }
-      } catch {
-        // ignore
-      }
+      whenFiniteTime(readFiniteTime(() => player.currentTime), (time) => {
+        setCurrentTime(time);
+        reportProgress(time);
+      });
     }, 250);
     return () => clearInterval(id);
   }, [player]);
 
   // Initial resume seek only once.
   useEffect(() => {
-    if (initialSeekDoneRef.current) return;
-    if (!(initialPositionSec > 0)) {
-      initialSeekDoneRef.current = true;
-      return;
-    }
-    const id = setInterval(() => {
-      try {
-        const duration = player.duration;
-        if (typeof duration === 'number' && duration > 0) {
-          const target = Math.min(initialPositionSec, Math.max(0, duration - 1));
-          player.currentTime = target;
-          wantPlayingRef.current = true;
-          player.play();
-          initialSeekDoneRef.current = true;
-          clearInterval(id);
-        }
-      } catch {
-        // keep trying
-      }
-    }, 200);
-    const timeout = setTimeout(() => {
-      clearInterval(id);
-      if (!initialSeekDoneRef.current) {
-        try {
-          player.currentTime = initialPositionSec;
-          player.play();
-        } catch {
-          // ignore
-        }
+    const mode = shouldSkipInitialSeek(initialSeekDoneRef.current, initialPositionSec);
+    let cleanup = () => {};
+    runInitialSeekMode(
+      mode,
+      () => {
         initialSeekDoneRef.current = true;
+      },
+      () => {
+        const id = setInterval(() => {
+          if (
+            trySeekTo(initialPositionSec, () => player.duration, (t) => {
+              player.currentTime = t;
+            })
+          ) {
+            wantPlayingRef.current = true;
+            player.play();
+            initialSeekDoneRef.current = true;
+            clearInterval(id);
+          }
+        }, 200);
+        const timeout = setTimeout(() => {
+          clearInterval(id);
+          forceSeekIfNeeded(initialSeekDoneRef.current, () => {
+            player.currentTime = initialPositionSec;
+            player.play();
+          });
+          initialSeekDoneRef.current = true;
+        }, 8000);
+        cleanup = () => {
+          clearInterval(id);
+          clearTimeout(timeout);
+        };
       }
-    }, 8000);
-    return () => {
-      clearInterval(id);
-      clearTimeout(timeout);
-    };
+    );
+    return () => cleanup();
   }, [player, initialPositionSec]);
 
   useEffect(() => {
     return () => {
       wantPlayingRef.current = false;
-      try {
-        const time = player.currentTime;
-        if (typeof time === 'number' && !Number.isNaN(time)) {
-          reportProgress(time, true);
-        }
-      } catch {
-        // ignore
-      }
+      whenFiniteTime(readFiniteTime(() => player.currentTime), (time) => {
+        reportProgress(time, true);
+      });
     };
   }, [player]);
 
@@ -300,9 +280,9 @@ export function MediaPlayer({
           if (!res.ok) return;
           text = await res.text();
         }
-        if (!text || cancelled) return;
-        const parsed = parseVtt(text);
-        if (!cancelled) setCues(parsed);
+        if (!shouldApplyParsedSubs(text, cancelled)) return;
+        const parsed = parseVtt(text!);
+        runUnlessCancelled(cancelled, () => setCues(parsed));
       } catch {
         // ignore missing/unreadable subs
       }
@@ -319,14 +299,9 @@ export function MediaPlayer({
 
   const handleClose = () => {
     wantPlayingRef.current = false;
-    try {
-      const time = player.currentTime;
-      if (typeof time === 'number' && !Number.isNaN(time)) {
-        reportProgress(time, true);
-      }
-    } catch {
-      // ignore
-    }
+    whenFiniteTime(readFiniteTime(() => player.currentTime), (time) => {
+      reportProgress(time, true);
+    });
     onClose?.();
   };
 

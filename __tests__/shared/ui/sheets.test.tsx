@@ -1,5 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Keyboard, Platform } from 'react-native';
 
 import { DownloadSheet } from '@/src/shared/ui/DownloadSheet';
 import { YoutubeDownloadSheet } from '@/src/shared/ui/YoutubeDownloadSheet';
@@ -19,9 +20,11 @@ jest.mock('@/src/features/downloads/store', () => ({
   ),
 }));
 
+let mockPreferredDownloadQuality = '720';
+
 jest.mock('@/src/features/settings/store', () => ({
   useSettingsStore: jest.fn((selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ preferredDownloadQuality: '720' })
+    selector({ preferredDownloadQuality: mockPreferredDownloadQuality })
   ),
 }));
 
@@ -72,6 +75,62 @@ jest.mock('@/src/features/playback/StreamResolver', () => ({
       ),
       ReactLocal.createElement(
         P,
+        {
+          testID: 'sheet-resolve-no-quality',
+          onPress: () =>
+            onResolved({
+              hlsSource: [{ label: 'EmptyQ', quality: {} }],
+              tracks: [{ kind: 'captions', label: 'EN', src: 'https://cdn/en.vtt' }],
+            }),
+        },
+        ReactLocal.createElement(Text, null, 'noq')
+      ),
+      ReactLocal.createElement(
+        P,
+        {
+          testID: 'sheet-resolve-no-subs',
+          onPress: () =>
+            onResolved({
+              hlsSource: [{ label: 'A', quality: { '720': 'https://cdn/720.m3u8' } }],
+              tracks: [],
+            }),
+        },
+        ReactLocal.createElement(Text, null, 'nosubs')
+      ),
+      ReactLocal.createElement(
+        P,
+        {
+          testID: 'sheet-resolve-shared-q',
+          onPress: () =>
+            onResolved({
+              hlsSource: [
+                {
+                  label: 'Original',
+                  quality: { '720': 'https://cdn/720.m3u8', '480': 'https://cdn/480.m3u8' },
+                },
+                {
+                  label: 'Alt',
+                  quality: { '720': 'https://cdn/alt720.m3u8', '360': 'https://cdn/360.m3u8' },
+                },
+              ],
+              tracks: [{ kind: 'captions', label: 'EN', src: 'https://cdn/en.vtt' }],
+            }),
+        },
+        ReactLocal.createElement(Text, null, 'sharedq')
+      ),
+      ReactLocal.createElement(
+        P,
+        {
+          testID: 'sheet-resolve-no-tracks-field',
+          onPress: () =>
+            onResolved({
+              hlsSource: [{ label: 'A', quality: { '720': 'https://cdn/720.m3u8' } }],
+            }),
+        },
+        ReactLocal.createElement(Text, null, 'notracksfield')
+      ),
+      ReactLocal.createElement(
+        P,
         { testID: 'sheet-resolve-err', onPress: () => onError('bad') },
         ReactLocal.createElement(Text, null, 'err')
       )
@@ -101,6 +160,7 @@ describe('DownloadSheet', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDownloadItems = [];
+    mockPreferredDownloadQuality = '720';
   });
 
   it('returns null when not visible', async () => {
@@ -197,6 +257,245 @@ describe('DownloadSheet', () => {
     await fireEvent.press(screen.getByTestId('icon-close'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('shows other-track dialog and downloads again', async () => {
+    mockDownloadItems = [
+      {
+        id: 'd1',
+        movieId: 'm1',
+        audioLabel: 'OtherAudio',
+        subtitleLabel: 'OtherSubs',
+        status: 'completed',
+        source: 'movie',
+      },
+    ];
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.otherTitle'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByText(t('downloadSheet.downloadAgain')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+  });
+
+  it('cancels other-track dialog', async () => {
+    mockDownloadItems = [
+      {
+        id: 'd1',
+        movieId: 'm1',
+        audioLabel: 'Other',
+        subtitleLabel: 'X',
+        status: 'queued',
+        source: 'movie',
+      },
+    ];
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.otherTitle'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+  });
+
+  it('shows enqueue error', async () => {
+    mockEnqueue.mockRejectedValueOnce(new Error('enqueue boom'));
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(screen.getByText('enqueue boom')).toBeTruthy());
+  });
+
+  it('shows resolve error', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-err'));
+    await waitFor(() => expect(screen.getByText('bad')).toBeTruthy());
+  });
+
+  it('shows quality unavailable when qualities empty', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-no-quality'));
+    await waitFor(() => expect(screen.getByText('EmptyQ')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.qualityUnavailable'))).toBeTruthy()
+    );
+  });
+
+  it('shows no tracks when pressing download without subtitles', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-no-subs'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.noSubtitles'))).toBeTruthy()
+    );
+    // Disabled CTA — fireEvent still invokes handler in RNTL
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.noTracks'))).toBeTruthy()
+    );
+  });
+
+  it('cancels exact duplicate via dialog backdrop', async () => {
+    mockDownloadItems = [
+      {
+        id: 'd1',
+        movieId: 'm1',
+        audioLabel: 'Original',
+        subtitleLabel: 'EN',
+        status: 'failed',
+        source: 'movie',
+      },
+    ];
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.alreadyTitle'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByTestId('confirm-dialog-backdrop'));
+    await waitFor(() =>
+      expect(screen.queryByText(t('downloadSheet.alreadyTitle'))).toBeNull()
+    );
+  });
+
+  it('preferred best quality and high quality warn; switches audio quality', async () => {
+    mockPreferredDownloadQuality = 'best';
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText('1080p')).toBeTruthy());
+    await fireEvent.press(screen.getByText('1080p'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.highQualityWarn'))).toBeTruthy()
+    );
+    await fireEvent.press(screen.getByText('Dub'));
+    await waitFor(() => expect(screen.getByText('480p')).toBeTruthy());
+  });
+
+  it('keeps quality when switching audio if still available', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-shared-q'));
+    await waitFor(() => expect(screen.getByText('720p')).toBeTruthy());
+    await fireEvent.press(screen.getByText('Alt'));
+    expect(screen.getByText('720p')).toBeTruthy();
+  });
+
+  it('shows starting spinner while enqueue pending', async () => {
+    let resolveEnqueue: () => void = () => undefined;
+    mockEnqueue.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveEnqueue = resolve;
+        })
+    );
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    resolveEnqueue();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('handles resolve without tracks field', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-no-tracks-field'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.noSubtitles'))).toBeTruthy()
+    );
+  });
 });
 
 describe('YoutubeDownloadSheet', () => {
@@ -257,5 +556,176 @@ describe('YoutubeDownloadSheet', () => {
     expect(screen.getByPlaceholderText(t('youtube.placeholder'))).toBeTruthy();
     await fireEvent.press(screen.getByTestId('icon-close'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows probe error and start error', async () => {
+    mockProbeYoutubeQualities.mockRejectedValueOnce(new Error('probe fail'));
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText('probe fail')).toBeTruthy());
+
+    mockProbeYoutubeQualities.mockResolvedValueOnce({
+      title: 'Cool Video',
+      qualities: [
+        { quality: '720', label: '720p' },
+        { quality: '1080', label: '1080p' },
+      ],
+    });
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText(t('youtube.cta'))).toBeTruthy());
+    mockEnqueueYoutube.mockRejectedValueOnce(new Error('start fail'));
+    await fireEvent.press(screen.getByText(t('youtube.cta')));
+    await waitFor(() => expect(screen.getByText('start fail')).toBeTruthy());
+  });
+
+  it('submit editing probes when canProbe', async () => {
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    const input = screen.getByPlaceholderText(t('youtube.placeholder'));
+    await fireEvent.changeText(input, 'https://youtu.be/abc12345678');
+    await fireEvent(input, 'submitEditing');
+    await waitFor(() => expect(mockProbeYoutubeQualities).toHaveBeenCalled());
+  });
+
+  it('uses iOS keyboard events', async () => {
+    const originalOS = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
+    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
+      handlers[event] = cb;
+      return { remove: jest.fn() };
+    });
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    handlers.keyboardWillShow?.({ endCoordinates: { height: 100 } });
+    handlers.keyboardWillHide?.();
+    addSpy.mockRestore();
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS });
+  });
+
+  it('preferred quality best maps to 720 initial state', async () => {
+    mockPreferredDownloadQuality = 'best';
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    expect(screen.getByText(t('youtube.title'))).toBeTruthy();
+  });
+
+  it('clears error on text change and handles keyboard + backdrop', async () => {
+    const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
+    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
+      handlers[event] = cb;
+      return { remove: jest.fn() };
+    });
+    const dismissSpy = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    mockExtractYoutubeVideoId.mockReturnValueOnce(null);
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText(t('youtube.invalidUrl'))).toBeTruthy());
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    await act(async () => {
+      handlers[showEvent]?.({ endCoordinates: { height: 280 } });
+    });
+    await fireEvent.press(screen.getByTestId('yt-sheet-backdrop'));
+    expect(dismissSpy).toHaveBeenCalled();
+    dismissSpy.mockClear();
+    await act(async () => {
+      handlers[hideEvent]?.();
+    });
+    await fireEvent.press(screen.getByTestId('yt-sheet-backdrop'));
+    expect(dismissSpy).not.toHaveBeenCalled();
+
+    addSpy.mockRestore();
+    dismissSpy.mockRestore();
+  });
+
+  it('android keyboard margin and probing/starting spinners', async () => {
+    const originalOS = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
+    jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb) => {
+      handlers[event] = cb as (e?: { endCoordinates: { height: number } }) => void;
+      return { remove: jest.fn() };
+    });
+
+    let resolveProbe: (v: {
+      title: string;
+      qualities: { quality: string; label: string }[];
+    }) => void = () => undefined;
+    mockProbeYoutubeQualities.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveProbe = resolve;
+        })
+    );
+
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    handlers.keyboardDidShow?.({ endCoordinates: { height: 200 } });
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    resolveProbe({
+      title: '',
+      qualities: [
+        { quality: '720', label: '720p' },
+        { quality: '1080', label: '1080p' },
+      ],
+    });
+    await waitFor(() => expect(screen.getByText(t('youtube.cta'))).toBeTruthy());
+    await fireEvent.press(screen.getByText('1080p'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.highQualityWarn'))).toBeTruthy()
+    );
+
+    let resolveStart: () => void = () => undefined;
+    mockEnqueueYoutube.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStart = resolve;
+        })
+    );
+    await fireEvent.press(screen.getByText(t('youtube.cta')));
+    await waitFor(() => expect(mockEnqueueYoutube).toHaveBeenCalled());
+    resolveStart();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS });
+  });
+
+  it('resetAndClose restores best preferred quality', async () => {
+    mockPreferredDownloadQuality = 'best';
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText(t('youtube.cta'))).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('icon-close'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('submitEditing no-ops when cannot probe', async () => {
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    const input = screen.getByPlaceholderText(t('youtube.placeholder'));
+    await fireEvent(input, 'submitEditing');
+    expect(mockProbeYoutubeQualities).not.toHaveBeenCalled();
   });
 });

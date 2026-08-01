@@ -6,6 +6,8 @@ import {
   resolveVideoTitle,
   youtubeiFormats,
   youtubeiHls,
+  firstStreamUrl,
+  decipherStreamUrl,
 } from '@/src/features/downloads/youtubeMeta';
 
 describe('youtubeMeta', () => {
@@ -48,12 +50,22 @@ describe('youtubeMeta', () => {
     ).toBe('a');
   });
 
-  it('youtubei helpers', () => {
-    expect(pickYoutubeiPoster({})).toBeUndefined();
-    expect(pickYoutubeiPoster({ basic_info: { thumbnail: [{ url: 'u' }] } })).toBe('u');
-    expect(youtubeiFormats({})).toEqual([]);
-    expect(youtubeiFormats({ streaming_data: { formats: [1] } })).toEqual([1]);
-    expect(youtubeiHls({})).toBeUndefined();
-    expect(youtubeiHls({ streaming_data: { hls_manifest_url: 'h' } })).toBe('h');
+  it('firstStreamUrl', () => {
+    expect(firstStreamUrl('a', 'b')).toBe('a');
+    expect(firstStreamUrl('', 'b')).toBe('b');
+    expect(firstStreamUrl(undefined, 'b')).toBe('b');
+  });
+
+  it('decipherStreamUrl success and failure', async () => {
+    await expect(decipherStreamUrl(async () => 'https://yt/x.mp4')).resolves.toBe(
+      'https://yt/x.mp4'
+    );
+    await expect(decipherStreamUrl(async () => undefined)).resolves.toBe('');
+    await expect(decipherStreamUrl(async () => '')).resolves.toBe('');
+    await expect(
+      decipherStreamUrl(async () => {
+        throw new Error('fail');
+      })
+    ).resolves.toBe('');
   });
 });

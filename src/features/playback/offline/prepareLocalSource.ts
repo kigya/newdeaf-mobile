@@ -11,7 +11,7 @@ export function ensureFileUri(path: string): string {
 
 function playlistDirectory(playlistUri: string): string {
   const uri = ensureFileUri(playlistUri);
-  const withoutQuery = uri.split('?')[0] ?? uri;
+  const withoutQuery = uri.split('?')[0];
   const idx = withoutQuery.lastIndexOf('/');
   return idx >= 0 ? withoutQuery.slice(0, idx + 1) : withoutQuery;
 }

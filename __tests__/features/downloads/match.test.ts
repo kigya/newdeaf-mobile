@@ -65,9 +65,20 @@ describe('findAnyExistingMovie', () => {
     expect(findAnyExistingMovie(items, '10')?.id).toBe('m');
     expect(findAnyExistingMovie(items, '99')).toBeUndefined();
   });
+
+  it('matches each active status branch', () => {
+    for (const status of ['queued', 'downloading', 'resolving', 'failed', 'paused'] as const) {
+      expect(
+        findAnyExistingMovie(
+          [dl({ id: status, movieId: '1', status: status as DownloadRecord['status'] })],
+          '1'
+        )?.id
+      ).toBe(status);
+    }
+  });
 });
 
-describe('listCompletedDownloads episode matching', () => {
+describe('listCompletedDownloads', () => {
   it('matches season/episode via movieId fields and prefix', () => {
     const items = [
       dl({
@@ -97,5 +108,14 @@ describe('listCompletedDownloads episode matching', () => {
       '2',
     ]);
     expect(isMovieDownloaded('10', items)).toBe(true);
+  });
+
+  it('skips youtube and missing playlist', () => {
+    const items = [
+      dl({ id: 'yt', movieId: '10', status: 'completed', source: 'youtube' }),
+      dl({ id: 'np', movieId: '10', status: 'completed', playlistPath: undefined }),
+      dl({ id: 'ok', movieId: '10', status: 'completed' }),
+    ];
+    expect(listCompletedDownloads('10', items).map((d) => d.id)).toEqual(['ok']);
   });
 });

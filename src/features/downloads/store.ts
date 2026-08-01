@@ -89,10 +89,12 @@ async function persist(record: DownloadRecord) {
 function patchItemInStore(record: DownloadRecord, activeId?: string | null) {
   useDownloadsStore.setState((s) => {
     const idx = s.items.findIndex((i) => i.id === record.id);
-    const items =
-      idx === -1
-        ? [record, ...s.items]
-        : s.items.map((i, iIdx) => (iIdx === idx ? record : i));
+    let items: DownloadRecord[];
+    if (idx === -1) {
+      items = [record, ...s.items];
+    } else {
+      items = s.items.map((i, iIdx) => (iIdx === idx ? record : i));
+    }
     return {
       items,
       ...(activeId !== undefined ? { activeId } : null),
@@ -110,13 +112,11 @@ function createProgressReporter(title: string) {
     if (!force && now - lastUiAt < PROGRESS_THROTTLE_MS) {
       pending = record;
       if (!flushTimer) {
+        const captured = record;
         flushTimer = setTimeout(() => {
           flushTimer = null;
-          if (pending) {
-            const r = pending;
-            pending = null;
-            void flush(r, true);
-          }
+          pending = null;
+          void flush(captured, true);
         }, PROGRESS_THROTTLE_MS - (now - lastUiAt));
       }
       return;
@@ -216,18 +216,16 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       // Deleted while queued.
       return;
     }
-    if (prior) {
-      current = {
-        ...prior,
-        ...current,
-        createdAt: prior.createdAt,
-        status: 'downloading',
-        error: undefined,
-        progress: prior.progress > 0 && prior.progress < 1 ? prior.progress : 0,
-        source: 'movie',
-        mediaKind: 'hls',
-      };
-    }
+    current = {
+      ...prior,
+      ...current,
+      createdAt: prior.createdAt,
+      status: 'downloading',
+      error: undefined,
+      progress: prior.progress > 0 && prior.progress < 1 ? prior.progress : 0,
+      source: 'movie',
+      mediaKind: 'hls',
+    };
 
     if (signal.aborted) return;
     await persist(current);
@@ -332,16 +330,14 @@ async function runYoutubeDownloadJob(
 
     const prior = await getDownload(id);
     if (!prior) return;
-    if (prior) {
-      current = {
-        ...prior,
-        ...current,
-        createdAt: prior.createdAt,
-        status: 'downloading',
-        error: undefined,
-        progress: prior.progress > 0 && prior.progress < 1 ? prior.progress : 0,
-      };
-    }
+    current = {
+      ...prior,
+      ...current,
+      createdAt: prior.createdAt,
+      status: 'downloading',
+      error: undefined,
+      progress: prior.progress > 0 && prior.progress < 1 ? prior.progress : 0,
+    };
 
     if (signal.aborted) return;
     await persist(current);

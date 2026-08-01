@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useRouter } from 'expo-router';
 
 import { ContinueWatchingRail } from '@/src/shared/ui/ContinueWatchingRail';
@@ -182,5 +182,27 @@ describe('ContinueWatchingRail', () => {
     await render(<ContinueWatchingRail onRequestRemove={onRequestRemove} />);
     await fireEvent(screen.getByText('Continue Me'), 'onLongPress');
     expect(onRequestRemove).toHaveBeenCalledWith(item);
+  });
+
+  it('uses zero progress ratio without duration and pressed style', async () => {
+    const TestRenderer = require('react-test-renderer');
+    mockStores([makeProgress({ durationSec: undefined })], []);
+    let renderer: {
+      root: {
+        findAll: (fn: (n: { props?: Record<string, unknown> }) => boolean) => { props: { style: (s: { pressed: boolean }) => unknown } }[];
+      };
+      unmount: () => void;
+    };
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <ContinueWatchingRail onRequestRemove={onRequestRemove} />
+      );
+    });
+    const pressable = renderer!.root.findAll(
+      (n) => typeof n.props?.style === 'function' && typeof n.props?.onPress === 'function'
+    )[0];
+    pressable.props.style({ pressed: true });
+    pressable.props.style({ pressed: false });
+    renderer!.unmount();
   });
 });

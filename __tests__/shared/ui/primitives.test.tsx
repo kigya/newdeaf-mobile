@@ -34,6 +34,24 @@ describe('Screen', () => {
     );
     expect(screen.getByText('Only body')).toBeTruthy();
   });
+
+  it('renders title without subtitle and custom edges', async () => {
+    await render(
+      <Screen title="Only title" edges={['top', 'bottom']}>
+        <Text>Body</Text>
+      </Screen>
+    );
+    expect(screen.getByText('Only title')).toBeTruthy();
+  });
+
+  it('renders left without title', async () => {
+    await render(
+      <Screen left={<Text>Only left</Text>}>
+        <Text>Body</Text>
+      </Screen>
+    );
+    expect(screen.getByText('Only left')).toBeTruthy();
+  });
 });
 
 describe('EmptyState', () => {

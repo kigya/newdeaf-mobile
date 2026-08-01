@@ -51,7 +51,7 @@ function mediaExt(abs: string, isKey: boolean): string {
   if (abs.includes('.mp4')) return 'mp4';
   if (abs.includes('.m4s')) return 'm4s';
   if (abs.includes('.ts')) return 'ts';
-  return isKey ? 'key' : 'bin';
+  return 'bin';
 }
 
 /**

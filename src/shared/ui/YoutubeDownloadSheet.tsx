@@ -94,10 +94,8 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   };
 
   const onBackdropPress = () => {
-    if (keyboardOpen.current || keyboardHeight > 0) {
-      Keyboard.dismiss();
-      return;
-    }
+    if (!(keyboardOpen.current || keyboardHeight > 0)) return;
+    Keyboard.dismiss();
   };
 
   const onProbe = async () => {
@@ -136,7 +134,11 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
 
   return (
     <View style={sheetStyles.root} pointerEvents="box-none">
-      <Pressable style={sheetStyles.backdrop} onPress={onBackdropPress} />
+      <Pressable
+        style={sheetStyles.backdrop}
+        onPress={onBackdropPress}
+        testID="yt-sheet-backdrop"
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}

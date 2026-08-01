@@ -42,6 +42,33 @@ describe('download foreground service', () => {
     );
   });
 
+  it('keep-alive task sleeps while running then exits', async () => {
+    jest.useFakeTimers();
+    try {
+      let taskFn: (() => Promise<void>) | undefined;
+      (BackgroundActions.isRunning as jest.Mock).mockReturnValue(false);
+      (BackgroundActions.start as jest.Mock).mockImplementationOnce(
+        async (task: () => Promise<void>) => {
+          taskFn = task;
+        }
+      );
+      await startDownloadForeground('Film');
+      expect(taskFn).toBeDefined();
+      (BackgroundActions.isRunning as jest.Mock).mockReturnValue(true);
+      const runningPromise = taskFn!();
+      await Promise.resolve();
+      // Exit the loop before the in-flight sleep resolves.
+      (BackgroundActions.isRunning as jest.Mock).mockReturnValue(false);
+      await stopDownloadForeground();
+      await jest.advanceTimersByTimeAsync(2000);
+      await runningPromise;
+    } finally {
+      jest.useRealTimers();
+      (BackgroundActions.isRunning as jest.Mock).mockReturnValue(false);
+      await stopDownloadForeground();
+    }
+  });
+
   it('updates notification when already running', async () => {
     (BackgroundActions.isRunning as jest.Mock).mockReturnValue(true);
     await startDownloadForeground('Film');
@@ -97,6 +124,12 @@ describe('download foreground service', () => {
     (BackgroundActions.isRunning as jest.Mock).mockReturnValue(true);
     await stopDownloadForeground();
     expect(BackgroundActions.stop).toHaveBeenCalled();
+  });
+
+  it('stopDownloadForeground skips stop when not running', async () => {
+    (BackgroundActions.isRunning as jest.Mock).mockReturnValue(false);
+    await stopDownloadForeground();
+    expect(BackgroundActions.stop).not.toHaveBeenCalled();
   });
 
   it('stopDownloadForeground warns on failure', async () => {

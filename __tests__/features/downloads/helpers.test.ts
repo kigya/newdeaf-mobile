@@ -59,7 +59,22 @@ describe('resolveMediaUrl', () => {
       'https://other/s.ts'
     );
   });
+
+  it('resolves protocol-relative and http absolute', () => {
+    expect(resolveMediaUrl('https://cdn.example/a.m3u8', '//cdn.example/s.ts')).toBe(
+      'https://cdn.example/s.ts'
+    );
+    expect(resolveMediaUrl('https://cdn.example/a.m3u8', 'http://other/s.ts')).toBe(
+      'http://other/s.ts'
+    );
+  });
+
+  it('falls back when base is not a valid URL', () => {
+    expect(resolveMediaUrl('not-a-url/base.m3u8', 'seg.ts')).toBe('not-a-url/seg.ts');
+    expect(resolveMediaUrl('broken/base.m3u8', '/abs.ts')).toBe('broken/abs.ts');
+  });
 });
+
 
 describe('pickSubtitleTrack', () => {
   it('returns null for empty', () => {

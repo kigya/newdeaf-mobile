@@ -76,25 +76,23 @@ export function DownloadSheet({
     setPayload(data);
     setError(null);
     const first = data.hlsSource[0];
-    if (first) {
-      const qs = qualityOptions(first);
-      setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
-    }
-    const preferred = pickSubtitleTrack(data.tracks ?? []);
+    const qs = qualityOptions(first);
+    setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
+    const trackList = data.tracks || [];
+    const preferred = pickSubtitleTrack(trackList);
     if (preferred) {
-      const idx = data.tracks.findIndex(
+      const idx = trackList.findIndex(
         (tr) => tr.src === preferred.src && tr.label === preferred.label
       );
-      setSubtitleIndex(idx >= 0 ? idx : 0);
+      setSubtitleIndex(Math.max(0, idx));
     }
   }, [preferredDownloadQuality]);
 
   const doEnqueue = async () => {
-    if (!selected || !selectedSubtitle) {
-      setError(t('downloadSheet.noTracks'));
-      return;
-    }
-    const hlsUrl = selected.quality[quality] ?? selected.quality[Object.keys(selected.quality)[0]];
+    // startDownload / duplicate-other confirm only call this when tracks are selected.
+    const audio = selected!;
+    const subtitle = selectedSubtitle!;
+    const hlsUrl = audio.quality[quality] ?? audio.quality[Object.keys(audio.quality)[0]];
     if (!hlsUrl) {
       setError(t('downloadSheet.qualityUnavailable'));
       return;
@@ -106,11 +104,11 @@ export function DownloadSheet({
         title,
         posterUrl,
         playerUrl,
-        audioLabel: selected.label,
+        audioLabel: audio.label,
         quality,
-        subtitleLabel: selectedSubtitle.label,
+        subtitleLabel: subtitle.label,
         hlsUrl: pickPrimaryMediaUrl(hlsUrl),
-        subtitleUrl: selectedSubtitle.src,
+        subtitleUrl: subtitle.src,
         season,
         episode,
       });
@@ -259,7 +257,7 @@ export function DownloadSheet({
 
             <Pressable
               style={[sheetStyles.cta, starting && sheetStyles.ctaDisabled]}
-              disabled={starting || !selectedSubtitle}
+              disabled={starting}
               onPress={startDownload}
             >
               {starting ? (

@@ -34,14 +34,16 @@ type Props = {
 
 export function PlayerWebView({
   playerUrl,
-  mode = 'watch',
-  mediaFetch = false,
+  mode: modeProp,
+  mediaFetch: mediaFetchProp,
   onStream,
   onError,
   onReady,
   onStatus,
   onProgress,
 }: Props) {
+  const mode = modeProp ?? 'watch';
+  const mediaFetch = mediaFetchProp ?? false;
   const [loading, setLoading] = useState(true);
   const resolvedRef = useRef(false);
   const webRef = useRef<WebView>(null);
