@@ -56,6 +56,24 @@ describe('youtubeMeta', () => {
     expect(firstStreamUrl(undefined, 'b')).toBe('b');
   });
 
+  it('youtubeiFormats falls back to empty array', () => {
+    expect(youtubeiFormats({})).toEqual([]);
+    expect(youtubeiFormats({ streaming_data: {} })).toEqual([]);
+    expect(youtubeiFormats({ streaming_data: { formats: undefined } })).toEqual([]);
+    expect(youtubeiFormats({ streaming_data: { formats: [{ a: 1 }] } })).toEqual([{ a: 1 }]);
+  });
+
+  it('youtubeiHls and pickYoutubeiPoster', () => {
+    expect(youtubeiHls({})).toBeUndefined();
+    expect(youtubeiHls({ streaming_data: { hls_manifest_url: 'https://m3u8' } })).toBe(
+      'https://m3u8'
+    );
+    expect(pickYoutubeiPoster({})).toBeUndefined();
+    expect(
+      pickYoutubeiPoster({ basic_info: { thumbnail: [{ url: 'https://img' }] } })
+    ).toBe('https://img');
+  });
+
   it('decipherStreamUrl success and failure', async () => {
     await expect(decipherStreamUrl(async () => 'https://yt/x.mp4')).resolves.toBe(
       'https://yt/x.mp4'
