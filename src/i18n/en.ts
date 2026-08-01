@@ -7,6 +7,7 @@ export const en: TranslationKeys = {
     genres: 'Genres',
     favorites: 'Favorites',
     downloads: 'Downloads',
+    settings: 'Settings',
   },
   common: {
     back: 'Back',
@@ -25,6 +26,7 @@ export const en: TranslationKeys = {
     notFound: 'Not found',
     error: 'Error',
     loadingError: 'Failed to load',
+    loading: 'Loading…',
   },
   catalog: {
     title: 'NewDeaf',
@@ -82,6 +84,30 @@ export const en: TranslationKeys = {
     downloadedSection: 'In downloads',
     watchOffline: 'Watch offline',
     downloadedTracks: '%{audio} · subs “%{subs}” · %{quality}p',
+    facts: 'Trivia',
+    awards: 'Awards',
+    similar: 'Similar',
+    related: 'Related',
+    spoiler: 'Spoiler',
+    loadingExtras: 'Loading extras…',
+    downloadUnavailable:
+      'Download is unavailable for this player — watch online in the embedded player',
+  },
+  settings: {
+    title: 'Settings',
+    subtitle: 'Language and downloads',
+    language: 'App language',
+    languageRu: 'Русский',
+    languageEn: 'English',
+    downloadQuality: 'Default download quality',
+    downloadQualityHint:
+      'Pre-selected when downloading a movie, episode, or YouTube video. You can change it each time.',
+    qualityBest: 'Best',
+    quality1080: '1080p',
+    quality720: '720p',
+    quality480: '480p',
+    quality360: '360p',
+    version: 'Version %{version}',
   },
   favorites: {
     title: 'Favorites',
@@ -112,6 +138,11 @@ export const en: TranslationKeys = {
     retryFailedTitle: 'Retry failed',
     retryFailed: 'Could not retry',
     episodeBadge: 'S%{season}E%{episode}',
+    youtubeQuality: 'YouTube · %{quality}p',
+    youtubeAudio: 'YouTube',
+    noSubtitlesDash: '—',
+    fgDownloading: 'Downloading: %{title}',
+    fgDownloadingPct: 'Downloading: %{title} · %{pct}%',
   },
   youtube: {
     title: 'YouTube Video Downloader',
@@ -157,6 +188,7 @@ export const en: TranslationKeys = {
     timeout: 'Timed out fetching streams. Try again.',
     settings: 'Settings',
     buffering: 'Buffering…',
+    error: 'Player error',
   },
   offline: {
     fileNotFound: 'File not found',

@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { t } from '@/src/i18n';
+import { useSettingsStore } from '@/src/settings/store';
 import { colors, fonts } from '@/src/theme';
 
 /** Icon + label area above the system gesture/nav inset. */
@@ -11,9 +12,11 @@ const TAB_BAR_CONTENT_HEIGHT = 52;
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16) + 24;
+  const locale = useSettingsStore((s) => s.locale);
 
   return (
     <Tabs
+      key={locale}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
@@ -75,6 +78,15 @@ export default function TabLayout() {
           title: t('tabs.downloads'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="download-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: t('tabs.settings'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />

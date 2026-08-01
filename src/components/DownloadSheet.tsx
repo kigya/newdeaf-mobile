@@ -18,6 +18,8 @@ import type { DownloadRecord } from '@/src/downloads/types';
 import { qualityOptions } from '@/src/player/streamPick';
 import { StreamResolver } from '@/src/player/StreamResolver';
 import { t } from '@/src/i18n';
+import { pickPreferredQuality } from '@/src/settings/pickPreferredQuality';
+import { useSettingsStore } from '@/src/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 type Props = {
@@ -89,11 +91,14 @@ export function DownloadSheet({
   const insets = useSafeAreaInsets();
   const enqueue = useDownloadsStore((s) => s.enqueue);
   const items = useDownloadsStore((s) => s.items);
+  const preferredDownloadQuality = useSettingsStore((s) => s.preferredDownloadQuality);
   const [payload, setPayload] = useState<StreamPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioIndex, setAudioIndex] = useState(0);
   const [subtitleIndex, setSubtitleIndex] = useState(0);
-  const [quality, setQuality] = useState('720');
+  const [quality, setQuality] = useState<string>(() =>
+    preferredDownloadQuality === 'best' ? '720' : preferredDownloadQuality
+  );
   const [starting, setStarting] = useState(false);
   const [dupDialog, setDupDialog] = useState<'exact' | 'other' | null>(null);
   const [dupExisting, setDupExisting] = useState<DownloadRecord | null>(null);
@@ -114,7 +119,7 @@ export function DownloadSheet({
     const first = data.hlsSource[0];
     if (first) {
       const qs = qualityOptions(first);
-      setQuality(qs.includes('720') ? '720' : qs[0] ?? '720');
+      setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
     }
     const preferred = pickSubtitleTrack(data.tracks ?? []);
     if (preferred) {
@@ -123,7 +128,7 @@ export function DownloadSheet({
       );
       setSubtitleIndex(idx >= 0 ? idx : 0);
     }
-  }, []);
+  }, [preferredDownloadQuality]);
 
   const doEnqueue = async () => {
     if (!selected || !selectedSubtitle) {
@@ -225,7 +230,9 @@ export function DownloadSheet({
                       setAudioIndex(index);
                       const qs = qualityOptions(source);
                       setQuality(
-                        qs.includes(quality) ? quality : qs.includes('720') ? '720' : qs[0]
+                        qs.includes(quality)
+                          ? quality
+                          : pickPreferredQuality(qs, preferredDownloadQuality)
                       );
                     }}
                     style={[styles.chip, active && styles.chipActive]}

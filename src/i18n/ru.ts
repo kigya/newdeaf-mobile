@@ -5,6 +5,7 @@ export const ru = {
     genres: 'Жанры',
     favorites: 'Избранное',
     downloads: 'Загрузки',
+    settings: 'Настройки',
   },
   common: {
     back: 'Назад',
@@ -23,6 +24,7 @@ export const ru = {
     notFound: 'Не найдено',
     error: 'Ошибка',
     loadingError: 'Ошибка загрузки',
+    loading: 'Загрузка…',
   },
   catalog: {
     title: 'NewDeaf',
@@ -80,6 +82,30 @@ export const ru = {
     downloadedSection: 'В загрузках',
     watchOffline: 'Смотреть офлайн',
     downloadedTracks: '%{audio} · субтитры «%{subs}» · %{quality}p',
+    facts: 'Интересные факты',
+    awards: 'Награды',
+    similar: 'Похожие',
+    related: 'Связанные',
+    spoiler: 'Спойлер',
+    loadingExtras: 'Загружаем доп. информацию…',
+    downloadUnavailable:
+      'Скачивание недоступно для этого плеера — смотрите онлайн во встроенном плеере',
+  },
+  settings: {
+    title: 'Настройки',
+    subtitle: 'Язык и загрузки',
+    language: 'Язык приложения',
+    languageRu: 'Русский',
+    languageEn: 'English',
+    downloadQuality: 'Качество скачивания по умолчанию',
+    downloadQualityHint:
+      'Будет выбрано при скачивании фильма, серии или YouTube. Можно изменить каждый раз.',
+    qualityBest: 'Лучшее',
+    quality1080: '1080p',
+    quality720: '720p',
+    quality480: '480p',
+    quality360: '360p',
+    version: 'Версия %{version}',
   },
   favorites: {
     title: 'Избранное',
@@ -110,6 +136,11 @@ export const ru = {
     retryFailedTitle: 'Не удалось повторить',
     retryFailed: 'Не удалось повторить',
     episodeBadge: 'S%{season}E%{episode}',
+    youtubeQuality: 'YouTube · %{quality}p',
+    youtubeAudio: 'YouTube',
+    noSubtitlesDash: '—',
+    fgDownloading: 'Скачиваем: %{title}',
+    fgDownloadingPct: 'Скачиваем: %{title} · %{pct}%',
   },
   youtube: {
     title: 'YouTube Video Downloader',
@@ -155,6 +186,7 @@ export const ru = {
     timeout: 'Таймаут получения потоков. Попробуйте ещё раз.',
     settings: 'Настройки',
     buffering: 'Буферизация…',
+    error: 'Ошибка плеера',
   },
   offline: {
     fileNotFound: 'Файл не найден',

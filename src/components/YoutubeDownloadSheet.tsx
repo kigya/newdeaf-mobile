@@ -21,6 +21,8 @@ import {
   type YoutubeQualityOption,
 } from '@/src/downloads/youtube';
 import { t } from '@/src/i18n';
+import { pickPreferredQuality } from '@/src/settings/pickPreferredQuality';
+import { useSettingsStore } from '@/src/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 
 type Props = {
@@ -34,10 +36,13 @@ type Step = 'url' | 'quality';
 export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const enqueueYoutube = useDownloadsStore((s) => s.enqueueYoutube);
+  const preferredDownloadQuality = useSettingsStore((s) => s.preferredDownloadQuality);
   const [url, setUrl] = useState('');
   const [step, setStep] = useState<Step>('url');
   const [qualities, setQualities] = useState<YoutubeQualityOption[]>([]);
-  const [quality, setQuality] = useState('720');
+  const [quality, setQuality] = useState<string>(() =>
+    preferredDownloadQuality === 'best' ? '720' : preferredDownloadQuality
+  );
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -78,7 +83,9 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
     setProbing(false);
     setStep('url');
     setQualities([]);
-    setQuality('720');
+    setQuality(
+      preferredDownloadQuality === 'best' ? '720' : preferredDownloadQuality
+    );
     setVideoTitle(null);
     Keyboard.dismiss();
     onClose();
@@ -102,11 +109,8 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
       const probe = await probeYoutubeQualities(url.trim());
       setQualities(probe.qualities);
       setVideoTitle(probe.title);
-      const preferred =
-        probe.qualities.find((q) => q.quality === '720')?.quality ??
-        probe.qualities[0]?.quality ??
-        '720';
-      setQuality(preferred);
+      const available = probe.qualities.map((q) => q.quality);
+      setQuality(pickPreferredQuality(available, preferredDownloadQuality));
       setStep('quality');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('youtube.startFailed'));

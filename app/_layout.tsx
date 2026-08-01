@@ -9,7 +9,7 @@ import { Stack } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
@@ -18,6 +18,7 @@ import { MediaFetchHost } from '@/src/downloads/MediaFetchHost';
 import { useDownloadsStore } from '@/src/downloads/store';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { t } from '@/src/i18n';
+import { useSettingsStore } from '@/src/settings/store';
 import { colors } from '@/src/theme';
 import { useWatchProgressStore } from '@/src/watch-progress/store';
 
@@ -33,6 +34,10 @@ export default function RootLayout() {
   const hydrateDownloads = useDownloadsStore((s) => s.hydrate);
   const hydrateFavorites = useFavoritesStore((s) => s.hydrate);
   const hydrateWatchProgress = useWatchProgressStore((s) => s.hydrate);
+  const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  const syncFromSystemIfChanged = useSettingsStore((s) => s.syncFromSystemIfChanged);
+  const locale = useSettingsStore((s) => s.locale);
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const [loaded, error] = useFonts({
     Montserrat_400Regular,
     Montserrat_500Medium,
@@ -46,22 +51,42 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded) {
-      void hydrateDownloads();
-      void hydrateFavorites();
-      void hydrateWatchProgress();
-      SplashScreen.hideAsync();
-      if (Platform.OS === 'android') {
-        void Notifications.requestPermissionsAsync();
-      }
+      void (async () => {
+        await hydrateSettings();
+        void hydrateDownloads();
+        void hydrateFavorites();
+        void hydrateWatchProgress();
+        SplashScreen.hideAsync();
+        if (Platform.OS === 'android') {
+          void Notifications.requestPermissionsAsync();
+        }
+      })();
     }
-  }, [loaded, hydrateDownloads, hydrateFavorites, hydrateWatchProgress]);
+  }, [
+    loaded,
+    hydrateSettings,
+    hydrateDownloads,
+    hydrateFavorites,
+    hydrateWatchProgress,
+  ]);
 
-  if (!loaded) return null;
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void syncFromSystemIfChanged();
+      }
+    });
+    return () => sub.remove();
+  }, [settingsHydrated, syncFromSystemIfChanged]);
+
+  if (!loaded || !settingsHydrated) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style="light" />
       <Stack
+        key={locale}
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
           headerTintColor: colors.text,
