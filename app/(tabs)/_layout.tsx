@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { t } from '@/src/i18n';
-import { useSettingsStore } from '@/src/settings/store';
-import { colors, fonts } from '@/src/theme';
+import { t } from '@/src/shared/i18n';
+import { useSettingsStore } from '@/src/features/settings/store';
+import { colors, fonts } from '@/src/shared/theme';
 
 /** Icon + label area above the system gesture/nav inset. */
 const TAB_BAR_CONTENT_HEIGHT = 52;

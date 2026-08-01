@@ -3,19 +3,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
-import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { getDownload } from '@/src/downloads/db';
-import type { DownloadRecord } from '@/src/downloads/types';
-import { t } from '@/src/i18n';
-import { OfflinePlayer } from '@/src/offline/OfflinePlayer';
-import { colors, fonts } from '@/src/theme';
-import { resumeDialogMessage } from '@/src/watch-progress/format';
-import { fetchProgress, useWatchProgressStore } from '@/src/watch-progress/store';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { getDownload } from '@/src/features/downloads/db';
+import type { DownloadRecord } from '@/src/features/downloads/types';
+import { t } from '@/src/shared/i18n';
+import { OfflinePlayer } from '@/src/features/playback/offline/OfflinePlayer';
+import { colors, fonts } from '@/src/shared/theme';
+import { resumeDialogMessage } from '@/src/features/watch-progress/format';
+import { fetchProgress, useWatchProgressStore } from '@/src/features/watch-progress/store';
 import {
   catalogMovieIdFromDownloadMovieId,
   isResumable,
   type WatchProgressRecord,
-} from '@/src/watch-progress/types';
+} from '@/src/features/watch-progress/types';
 
 type PlayMode = 'checking' | 'prompt' | 'playing';
 

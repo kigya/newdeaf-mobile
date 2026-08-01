@@ -9,13 +9,13 @@ import {
   View,
 } from 'react-native';
 
-import { searchMovies } from '@/src/api/catalog';
-import type { MovieSummary } from '@/src/api/types';
-import { MovieGrid } from '@/src/components/MovieGrid';
-import { Screen } from '@/src/components/Screen';
-import { t } from '@/src/i18n';
-import { colors, fonts, radius, spacing } from '@/src/theme';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
+import { searchMovies } from '@/src/data/catalog/catalog';
+import type { MovieSummary } from '@/src/data/catalog/types';
+import { MovieGrid } from '@/src/shared/ui/MovieGrid';
+import { Screen } from '@/src/shared/ui/Screen';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
 const MIN_QUERY_LENGTH = 4;
 

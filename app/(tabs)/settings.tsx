@@ -3,15 +3,15 @@ import { MotiView } from 'moti';
 import { useState } from 'react';
 import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Screen } from '@/src/components/Screen';
-import { t } from '@/src/i18n';
-import { useSettingsStore } from '@/src/settings/store';
+import { Screen } from '@/src/shared/ui/Screen';
+import { t } from '@/src/shared/i18n';
+import { useSettingsStore } from '@/src/features/settings/store';
 import {
   QUALITY_OPTIONS,
   type AppLocale,
   type PreferredDownloadQuality,
-} from '@/src/settings/types';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+} from '@/src/features/settings/types';
+import { colors, fonts, radius, spacing } from '@/src/shared/theme';
 
 function qualityLabel(q: PreferredDownloadQuality): string {
   switch (q) {

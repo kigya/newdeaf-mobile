@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { fetchHomeMovies } from '@/src/api/catalog';
-import type { MovieSummary } from '@/src/api/types';
-import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { ContinueWatchingRail } from '@/src/components/ContinueWatchingRail';
-import { GenresBanner } from '@/src/components/GenresBanner';
-import { MovieGrid } from '@/src/components/MovieGrid';
-import { Screen } from '@/src/components/Screen';
-import { t } from '@/src/i18n';
-import { colors, fonts, spacing } from '@/src/theme';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
-import type { WatchProgressRecord } from '@/src/watch-progress/types';
+import { fetchHomeMovies } from '@/src/data/catalog/catalog';
+import type { MovieSummary } from '@/src/data/catalog/types';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { ContinueWatchingRail } from '@/src/shared/ui/ContinueWatchingRail';
+import { GenresBanner } from '@/src/shared/ui/GenresBanner';
+import { MovieGrid } from '@/src/shared/ui/MovieGrid';
+import { Screen } from '@/src/shared/ui/Screen';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, spacing } from '@/src/shared/theme';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
+import type { WatchProgressRecord } from '@/src/features/watch-progress/types';
 
 export default function CatalogScreen() {
   const getWatchProgress = useWatchProgressStore((s) => s.getLatestForMovie);

@@ -2,12 +2,12 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { fetchGenreMovies } from '@/src/api/catalog';
-import type { MovieSummary } from '@/src/api/types';
-import { MovieGrid } from '@/src/components/MovieGrid';
-import { t } from '@/src/i18n';
-import { colors, fonts, spacing } from '@/src/theme';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
+import { fetchGenreMovies } from '@/src/data/catalog/catalog';
+import type { MovieSummary } from '@/src/data/catalog/types';
+import { MovieGrid } from '@/src/shared/ui/MovieGrid';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, spacing } from '@/src/shared/theme';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
 export default function GenreMoviesScreen() {
   const { slug, href, name } = useLocalSearchParams<{

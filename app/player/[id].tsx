@@ -5,11 +5,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { PlayerWebView } from '@/src/player/PlayerWebView';
-import { t } from '@/src/i18n';
-import { colors, fonts, spacing } from '@/src/theme';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
-import { sanitizeDurationSec } from '@/src/watch-progress/types';
+import { PlayerWebView } from '@/src/features/playback/PlayerWebView';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, spacing } from '@/src/shared/theme';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
+import { sanitizeDurationSec } from '@/src/features/watch-progress/types';
 
 const PROGRESS_THROTTLE_MS = 2000;
 

@@ -3,11 +3,11 @@ import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getGenres } from '@/src/api/catalog';
-import { Screen } from '@/src/components/Screen';
-import { useBreakpoint } from '@/src/hooks/useBreakpoint';
-import { t } from '@/src/i18n';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { getGenres } from '@/src/data/catalog/catalog';
+import { Screen } from '@/src/shared/ui/Screen';
+import { useBreakpoint } from '@/src/shared/hooks/useBreakpoint';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, radius, spacing } from '@/src/shared/theme';
 
 export default function GenresScreen() {
   const genres = getGenres();

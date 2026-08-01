@@ -5,15 +5,15 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated';
 
-import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { EmptyState } from '@/src/components/EmptyState';
-import { Screen } from '@/src/components/Screen';
-import { YoutubeDownloadSheet } from '@/src/components/YoutubeDownloadSheet';
-import { useDownloadsStore } from '@/src/downloads/store';
-import type { DownloadRecord } from '@/src/downloads/types';
-import { StreamResolver } from '@/src/player/StreamResolver';
-import { t } from '@/src/i18n';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { EmptyState } from '@/src/shared/ui/EmptyState';
+import { Screen } from '@/src/shared/ui/Screen';
+import { YoutubeDownloadSheet } from '@/src/shared/ui/YoutubeDownloadSheet';
+import { useDownloadsStore } from '@/src/features/downloads/store';
+import type { DownloadRecord } from '@/src/features/downloads/types';
+import { StreamResolver } from '@/src/features/playback/StreamResolver';
+import { t } from '@/src/shared/i18n';
+import { colors, fonts, radius, spacing } from '@/src/shared/theme';
 
 function statusLabel(item: DownloadRecord): string {
   switch (item.status) {

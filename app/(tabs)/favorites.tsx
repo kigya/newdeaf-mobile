@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import type { MovieSummary } from '@/src/api/types';
-import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { MovieGrid } from '@/src/components/MovieGrid';
-import { Screen } from '@/src/components/Screen';
-import { useDownloadsStore } from '@/src/downloads/store';
-import { isMovieDownloaded } from '@/src/favorites/downloaded';
-import { useFavoritesStore } from '@/src/favorites/store';
-import { t } from '@/src/i18n';
-import { useWatchProgressStore } from '@/src/watch-progress/store';
+import type { MovieSummary } from '@/src/data/catalog/types';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { MovieGrid } from '@/src/shared/ui/MovieGrid';
+import { Screen } from '@/src/shared/ui/Screen';
+import { useDownloadsStore } from '@/src/features/downloads/store';
+import { isMovieDownloaded } from '@/src/features/favorites/downloaded';
+import { useFavoritesStore } from '@/src/features/favorites/store';
+import { t } from '@/src/shared/i18n';
+import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
 export default function FavoritesScreen() {
   const items = useFavoritesStore((s) => s.items);

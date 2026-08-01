@@ -15,35 +15,35 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
-import { fetchMovieDetail, fetchPlayerFileList } from '@/src/api/catalog';
+import { fetchMovieDetail, fetchPlayerFileList } from '@/src/data/catalog/catalog';
 import {
   enrichFromKinopoisk,
   type KinopoiskEnrichment,
-} from '@/src/api/kinopoisk';
+} from '@/src/data/catalog/kinopoisk';
 import {
   buildPlayerUrl,
   listEpisodes,
   listSeasons,
   pickEpisodeEntry,
-} from '@/src/api/parse';
-import { enrichMovieMetadata } from '@/src/api/tmdb';
-import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/api/types';
-import { ConfirmDialog } from '@/src/components/ConfirmDialog';
-import { DownloadSheet } from '@/src/components/DownloadSheet';
-import { listCompletedDownloads } from '@/src/downloads/match';
-import { useDownloadsStore } from '@/src/downloads/store';
-import { useFavoritesStore } from '@/src/favorites/store';
-import { useBreakpoint } from '@/src/hooks/useBreakpoint';
-import { getLocale, t } from '@/src/i18n';
-import { StreamResolver } from '@/src/player/StreamResolver';
-import { colors, fonts, radius, spacing } from '@/src/theme';
-import { resumeDialogMessage } from '@/src/watch-progress/format';
+} from '@/src/data/catalog/parse';
+import { enrichMovieMetadata } from '@/src/data/catalog/tmdb';
+import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/data/catalog/types';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
+import { DownloadSheet } from '@/src/shared/ui/DownloadSheet';
+import { listCompletedDownloads } from '@/src/features/downloads/match';
+import { useDownloadsStore } from '@/src/features/downloads/store';
+import { useFavoritesStore } from '@/src/features/favorites/store';
+import { useBreakpoint } from '@/src/shared/hooks/useBreakpoint';
+import { getLocale, t } from '@/src/shared/i18n';
+import { StreamResolver } from '@/src/features/playback/StreamResolver';
+import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { resumeDialogMessage } from '@/src/features/watch-progress/format';
 import {
   fetchLatestProgressForMovie,
   fetchProgress,
   useWatchProgressStore,
-} from '@/src/watch-progress/store';
-import { isResumable, type WatchProgressRecord } from '@/src/watch-progress/types';
+} from '@/src/features/watch-progress/store';
+import { isResumable, type WatchProgressRecord } from '@/src/features/watch-progress/types';
 
 export default function MovieDetailScreen() {
   const { id, href, title: paramTitle, posterUrl: paramPoster } = useLocalSearchParams<{
