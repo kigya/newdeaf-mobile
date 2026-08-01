@@ -1,0 +1,38 @@
+---
+description: Non-obvious NewDeaf business rules SSOT for agents
+globs:
+alwaysApply: true
+---
+
+# Business behavior (quick SSOT)
+
+Full detail: [`prd/behavior/cross-cutting.md`](prd/behavior/cross-cutting.md).
+
+## Locale
+
+- SSOT: Settings SQLite `locale` (ru|en), not OS alone
+- Manual change updates locale only; OS change on AppState active overwrites when system locale code changed
+- Non-ru system → en; remount navigators with `key={locale}`
+
+## Default download quality
+
+- Default `720`; options best|1080|720|480|360
+- Pre-selects download sheets via `pickPreferredQuality`; per-download override allowed
+- Does **not** force online WebView quality
+
+## Downloads
+
+- Process death: in-flight → `failed` + interrupted; user must Retry
+- Movie retry wipes partial dir (CDN URLs expire)
+- Movie jobs serialized; YouTube not on that chain
+- Prefer WebView media fetch for CDN 403 avoidance
+
+## Watch progress
+
+- Resumable if position ≥ 30s and not completed
+- Completed at ≥90% or (duration ≥ 15min and remaining &lt; 120s) → delete row
+- Sanitize suspicious short WebView durations before upsert
+
+## Orientation
+
+- Unlocked app-wide; reflow via breakpoints — no lock/unlock API

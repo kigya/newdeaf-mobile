@@ -1,0 +1,18 @@
+---
+description: Read PRDs before changing NewDeaf behavior; keep docs in sync
+globs:
+alwaysApply: true
+---
+
+# PRD-first
+
+Before implementing or changing user-visible behavior:
+
+1. Read [`prd/product-overview.md`](prd/product-overview.md)
+2. Read the relevant file under [`prd/features/`](prd/features/)
+3. Read matching screen docs under [`prd/screens/`](prd/screens/) when touching a route
+4. Read [`prd/behavior/cross-cutting.md`](prd/behavior/cross-cutting.md) for locale, downloads interrupt, resume, orientation
+
+When behavior changes intentionally, update the PRD(s) in the **same change set**. Do not silently diverge from documented acceptance criteria.
+
+APIs: [`prd/apis-and-integrations.md`](prd/apis-and-integrations.md). ADRs: [`prd/decisions/`](prd/decisions/).

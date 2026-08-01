@@ -1,0 +1,180 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+
+import { ConfirmDialog } from '@/src/components/ConfirmDialog';
+import { getDownload } from '@/src/downloads/db';
+import type { DownloadRecord } from '@/src/downloads/types';
+import { t } from '@/src/i18n';
+import { OfflinePlayer } from '@/src/offline/OfflinePlayer';
+import { colors, fonts } from '@/src/theme';
+import { resumeDialogMessage } from '@/src/watch-progress/format';
+import { fetchProgress, useWatchProgressStore } from '@/src/watch-progress/store';
+import {
+  catalogMovieIdFromDownloadMovieId,
+  isResumable,
+  type WatchProgressRecord,
+} from '@/src/watch-progress/types';
+
+type PlayMode = 'checking' | 'prompt' | 'playing';
+
+export default function OfflinePlayerScreen() {
+  const { downloadId } = useLocalSearchParams<{ downloadId: string }>();
+  const router = useRouter();
+  const upsertProgress = useWatchProgressStore((s) => s.upsert);
+  const clearProgress = useWatchProgressStore((s) => s.clear);
+
+  const [item, setItem] = useState<DownloadRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [playMode, setPlayMode] = useState<PlayMode>('checking');
+  const [resumeTarget, setResumeTarget] = useState<WatchProgressRecord | null>(null);
+  const [initialPositionSec, setInitialPositionSec] = useState(0);
+  const saveGenRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await getDownload(downloadId);
+        if (cancelled) return;
+        if (!row?.playlistPath) {
+          setError(t('offline.fileNotFound'));
+          return;
+        }
+        setItem(row);
+
+        const catalogId = catalogMovieIdFromDownloadMovieId(
+          row.movieId,
+          row.season,
+          row.episode
+        );
+        const saved = await fetchProgress(catalogId, row.season, row.episode);
+        if (cancelled) return;
+
+        if (isResumable(saved)) {
+          setResumeTarget(saved);
+          setPlayMode('prompt');
+        } else {
+          setInitialPositionSec(0);
+          setPlayMode('playing');
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : t('common.error'));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [downloadId]);
+
+  const startPlayback = useCallback(
+    async (mode: 'resume' | 'start') => {
+      if (!item) return;
+      const catalogId = catalogMovieIdFromDownloadMovieId(
+        item.movieId,
+        item.season,
+        item.episode
+      );
+      if (mode === 'start') {
+        await clearProgress(catalogId, item.season, item.episode);
+        setInitialPositionSec(0);
+      } else {
+        setInitialPositionSec(resumeTarget?.positionSec ?? 0);
+      }
+      setPlayMode('playing');
+    },
+    [clearProgress, item, resumeTarget]
+  );
+
+  const handleProgress = useCallback(
+    (payload: { positionSec: number; durationSec?: number }) => {
+      if (!item) return;
+      const catalogId = catalogMovieIdFromDownloadMovieId(
+        item.movieId,
+        item.season,
+        item.episode
+      );
+      const gen = ++saveGenRef.current;
+      void upsertProgress({
+        movieId: catalogId,
+        season: item.season,
+        episode: item.episode,
+        positionSec: payload.positionSec,
+        durationSec: payload.durationSec,
+        title: item.title,
+        posterUrl: item.posterUrl,
+        isSeries: item.season != null && item.episode != null,
+        source: 'offline',
+        downloadId: item.id,
+        saveGeneration: gen,
+      });
+    },
+    [item, upsertProgress]
+  );
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (!item?.playlistPath || playMode === 'checking') {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (playMode === 'prompt') {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" hidden />
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+        <ConfirmDialog
+          visible
+          title={t('resume.title')}
+          message={resumeTarget ? resumeDialogMessage(resumeTarget) : undefined}
+          confirmLabel={t('resume.continue')}
+          cancelLabel={t('resume.startOver')}
+          onConfirm={() => void startPlayback('resume')}
+          onCancel={() => void startPlayback('start')}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      <StatusBar style="light" hidden />
+      <OfflinePlayer
+        playlistPath={item.playlistPath}
+        subtitlePath={item.subtitlePath}
+        title={item.title}
+        mediaKind={item.mediaKind}
+        initialPositionSec={initialPositionSec}
+        onProgress={handleProgress}
+        onClose={() => router.back()}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.black },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+  },
+});
