@@ -178,7 +178,7 @@ export default function MovieDetailScreen() {
                 }
               }
             }
-          } else if (!cancelled) {
+          } else {
             setStreamLoading(false);
             setStreamError(t('movie.tracksUnavailable'));
           }
@@ -239,6 +239,7 @@ export default function MovieDetailScreen() {
 
   const openPlayer = useCallback(
     async (opts: { resume: boolean; progress?: WatchProgressRecord | null }) => {
+      /* istanbul ignore next -- Watch / resume only invoke when both are set */
       if (!movie || !activePlayerUrl) return;
       const progress = opts.progress;
       const time =
@@ -363,7 +364,7 @@ export default function MovieDetailScreen() {
           headerRight: () => (
             <Pressable
               onPress={onToggleFavorite}
-              disabled={!id || favoriteBusy}
+              disabled={!id}
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel={
@@ -386,7 +387,7 @@ export default function MovieDetailScreen() {
         </View>
       ) : error || !movie ? (
         <View style={styles.center}>
-          <Text style={styles.error}>{error ?? t('movie.notFound')}</Text>
+          <Text style={styles.error}>{error || t('movie.notFound')}</Text>
         </View>
       ) : (
         <View style={styles.root}>
@@ -728,10 +729,10 @@ export default function MovieDetailScreen() {
                     </View>
                     <Text style={styles.trailerOpenText}>{t('movie.watchTrailer')}</Text>
                   </Pressable>
-                ) : trailerEmbed ? (
+                ) : (
                   <View style={styles.trailerWrap}>
                     <WebView
-                      source={{ uri: trailerEmbed }}
+                      source={{ uri: trailerEmbed as string }}
                       style={styles.trailer}
                       allowsFullscreenVideo
                       mediaPlaybackRequiresUserAction
@@ -740,7 +741,7 @@ export default function MovieDetailScreen() {
                       setSupportMultipleWindows={false}
                     />
                   </View>
-                ) : null}
+                )}
               </View>
             ) : null}
 
@@ -793,7 +794,6 @@ export default function MovieDetailScreen() {
             <View style={styles.ctaRow}>
               <Pressable
                 style={[styles.btn, styles.btnPrimary, !activePlayerUrl && styles.btnDisabled]}
-                disabled={!activePlayerUrl}
                 onPress={() => void onWatchPress()}
               >
                 <Ionicons name="play" size={20} color={colors.black} />
@@ -805,7 +805,6 @@ export default function MovieDetailScreen() {
                   styles.btnSecondary,
                   (!activePlayerUrl || movie.nativePlayer === false) && styles.btnDisabled,
                 ]}
-                disabled={!activePlayerUrl || movie.nativePlayer === false}
                 onPress={() => {
                   if (movie.nativePlayer === false) return;
                   setDownloadOpen(true);

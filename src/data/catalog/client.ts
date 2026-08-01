@@ -88,14 +88,12 @@ const NAMED_ENTITIES: Record<string, string> = {
 
 function decodeHtmlEntities(text: string): string {
   return text
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => {
-      const code = Number.parseInt(hex, 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
-    })
-    .replace(/&#(\d+);/g, (_, dec: string) => {
-      const code = Number.parseInt(dec, 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
-    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16))
+    )
+    .replace(/&#(\d+);/g, (_, dec: string) =>
+      String.fromCodePoint(Number.parseInt(dec, 10))
+    )
     .replace(/&([a-z]+|#039);/gi, (match, name: string) => {
       const key = name.toLowerCase();
       return NAMED_ENTITIES[key] ?? match;

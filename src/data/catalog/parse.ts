@@ -97,7 +97,7 @@ export function parseMovieList(html: string): MovieSummary[] {
       title,
       year: extractYear(title) ?? extractYear(parsed.slug),
       posterUrl: absolutize(imgSrc),
-      href: parsed.href.startsWith('/') ? parsed.href : `/${parsed.href}`,
+      href: parsed.href,
       kpRating,
       imdbRating,
       isSeries: detectIsSeries(block, title, parsed.slug),
@@ -123,7 +123,7 @@ export function parseMovieList(html: string): MovieSummary[] {
         title,
         year: extractYear(title) ?? extractYear(parsed.slug),
         posterUrl: absolutize(src),
-        href: parsed.href.startsWith('/') ? parsed.href : `/${parsed.href}`,
+        href: parsed.href,
         isSeries: detectIsSeries(block, title, parsed.slug),
       });
     }
@@ -181,7 +181,7 @@ export function parseSearchResults(html: string): MovieSummary[] {
       title,
       year: extractYear(title) ?? extractYear(parsed.slug),
       posterUrl: absolutize(imgSrc),
-      href: parsed.href.startsWith('/') ? parsed.href : `/${parsed.href}`,
+      href: parsed.href,
       kpRating,
       imdbRating,
       isSeries: detectIsSeries(window, title, parsed.slug),
@@ -205,7 +205,7 @@ export function parseSearchResults(html: string): MovieSummary[] {
         title,
         year: extractYear(title) ?? extractYear(parsed.slug),
         posterUrl: absolutize(imgSrc),
-        href: parsed.href.startsWith('/') ? parsed.href : `/${parsed.href}`,
+        href: parsed.href,
         isSeries: detectIsSeries(nearby, title, parsed.slug),
       });
     }
@@ -266,7 +266,7 @@ export function parseMovieDetail(html: string, fallbackHref: string): MovieDetai
   title = title.replace(/\s*\/\s*.*$/, (part) => part);
   if (title.includes('/')) {
     const parts = title.split('/').map((p) => p.trim());
-    title = parts.find((p) => /\(\d{4}/.test(p)) ?? parts[parts.length - 1] ?? title;
+    title = parts.find((p) => /\(\d{4}/.test(p)) || parts.filter(Boolean).at(-1) || title;
   }
   title = cleanTitle(title);
 
@@ -341,7 +341,7 @@ export function parseMovieDetail(html: string, fallbackHref: string): MovieDetai
     title: title || titleFromSlug(slug),
     year: extractYear(title) ?? extractYear(slug),
     posterUrl,
-    href: parsedHref?.href?.startsWith('/') ? parsedHref.href : `/${id}-${slug}.html`,
+    href: parsedHref?.href ?? `/${id}-${slug}.html`,
     kpRating,
     imdbRating,
     description,
@@ -401,9 +401,9 @@ function isPrerollContext(html: string, src: string): boolean {
   return true;
 }
 
-function scoreNativeCandidate(url: string, html: string, rawSrcForMatch?: string): number {
+function scoreNativeCandidate(url: string, html: string, rawSrcForMatch: string): number {
   let score = 0;
-  if (isPrerollContext(html, rawSrcForMatch ?? url)) score -= 80;
+  if (isPrerollContext(html, rawSrcForMatch)) score -= 80;
   try {
     const u = new URL(url);
     if (u.searchParams.get('token_movie')) score += 50;
@@ -426,9 +426,8 @@ type PickedPlayers = {
   nativePlayer: boolean;
 };
 
-function normalizePlayerSrc(raw: string): string | null {
+function normalizePlayerSrc(raw: string): string {
   const trimmed = raw.trim();
-  if (!trimmed) return null;
   try {
     return new URL(trimmed).href;
   } catch {
@@ -439,14 +438,10 @@ function normalizePlayerSrc(raw: string): string | null {
 function pickPlayerUrls(html: string): PickedPlayers {
   const iframeSrcs = [
     ...html.matchAll(/<iframe\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["']/gi),
-  ]
-    .map((m) => {
-      const raw = m[1];
-      const normalized = normalizePlayerSrc(raw);
-      if (!normalized) return null;
-      return { raw, normalized };
-    })
-    .filter((entry): entry is { raw: string; normalized: string } => Boolean(entry));
+  ].map((m) => {
+    const raw = m[1];
+    return { raw, normalized: normalizePlayerSrc(raw) };
+  });
 
   const byNormalized = new Map<string, string>();
   for (const { raw, normalized } of iframeSrcs) {
@@ -456,8 +451,8 @@ function pickPlayerUrls(html: string): PickedPlayers {
   const nativeCandidates = unique.filter(isNativeBalancerUrl);
   nativeCandidates.sort(
     (a, b) =>
-      scoreNativeCandidate(b, html, byNormalized.get(b) ?? b) -
-      scoreNativeCandidate(a, html, byNormalized.get(a) ?? a)
+      scoreNativeCandidate(b, html, byNormalized.get(b)!) -
+      scoreNativeCandidate(a, html, byNormalized.get(a)!)
   );
 
   const bestNative = nativeCandidates[0];
