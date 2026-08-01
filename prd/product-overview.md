@@ -1,36 +1,40 @@
 # NewDeaf — product overview
 
 - **Status:** implemented (baseline)
-- **Last updated:** 2026-07-31
-- **Platform:** Android-first Expo / React Native app (`top.newdeaf.app`)
+- **Last updated:** 2026-08-01
+- **Platform:** Android-first Expo / React Native app (`top.newdeaf.app`), version `1.0.0`
 
-## Vision
+## Idea
 
-Give users a fast native client to browse [newdeaf.top](https://newdeaf.top), play titles in the site’s online player, and download selected streams for offline viewing — without accounts or cloud sync.
+NewDeaf is a native mobile client for [newdeaf.top](https://newdeaf.top). Users browse the site catalog inside the app, watch titles in the site’s online player, download selected streams (and optional YouTube sources) for offline viewing, keep local favorites, and resume watch progress — without accounts, cloud sync, payments, or analytics.
 
 ## Users
 
-- People who already use newdeaf.top and want a mobile-native catalog, search, and offline library
-- Primary locale: Russian UI with English fallback (`src/i18n/`)
+- People who already use newdeaf.top and want a mobile-native catalog, search, downloads, and offline library
+- Primary locale: Russian UI with English fallback (`src/i18n/`, Settings SSOT)
 
 ## Current capabilities
 
-- New-releases catalog with pagination
-- Search and genre browsing
-- Movie details (description, KP/IMDb ratings when present)
-- Online playback via embedded site player (quality / audio / subtitles in-player)
-- Download selected quality + audio track + subtitles (HLS / progressive; YouTube path supported)
-- Offline playback of downloads with subtitles
-- Favorites and watch-progress persisted locally
-- Tablet-friendly layout
+- New-releases catalog with pull-to-refresh and infinite pagination
+- Continue Watching rail (online + offline-aware)
+- Search (min 4 characters; EN→RU title bridge via TMDB when needed)
+- Genre browsing (hidden tab + genre list screens)
+- Movie details (scrape + optional TMDB localization + Kinopoisk enrichment)
+- Online playback via embedded site player (WebView)
+- Download selected quality + audio + subtitles (HLS / progressive); YouTube download path
+- Offline playback with local VTT subtitles
+- Favorites and watch progress persisted in SQLite
+- Settings: language (ru/en), default download quality, app version footer
+- Tablet-friendly layout via `useBreakpoint` / window dimensions
 
 ## Product boundaries
 
 - **No** user accounts, auth, or multi-device sync
 - **No** payments or subscriptions
 - **No** first-party analytics / crash SDK in-repo today
-- Catalog data is **scraped** from newdeaf.top (not a private REST API)
-- Shipping target today is **Android**; iOS project tree is not the primary deliverable
+- Catalog data is **scraped** from newdeaf.top (not a private REST catalog API)
+- TMDB and Kinopoisk are **enrichment / search-bridge** only — see [`apis-and-integrations.md`](apis-and-integrations.md)
+- Shipping target today is **Android**; iOS is not the primary deliverable
 
 ## Feature PRDs
 
@@ -40,6 +44,23 @@ Give users a fast native client to browse [newdeaf.top](https://newdeaf.top), pl
 | Details & online player | [`features/movie-details-and-player.md`](features/movie-details-and-player.md) |
 | Downloads & offline | [`features/downloads-and-offline.md`](features/downloads-and-offline.md) |
 | Favorites & progress | [`features/favorites-and-progress.md`](features/favorites-and-progress.md) |
+| Settings | [`features/settings.md`](features/settings.md) |
+
+## Screen PRDs
+
+Detailed per-route behavior lives under [`screens/`](screens/). Cross-cutting rules: [`behavior/cross-cutting.md`](behavior/cross-cutting.md).
+
+## APIs & integrations
+
+[`apis-and-integrations.md`](apis-and-integrations.md)
+
+## Definition of done (features)
+
+1. Behavior matches the relevant PRDs under `features/` and `screens/`
+2. User-facing copy goes through `t()`; styling uses `src/theme`
+3. **`npm test` passes** (unit suite under `__tests__/`)
+4. `npm run typecheck` passes
+5. If behavior changed intentionally, update the PRD in the same change set
 
 ## Stack pointer
 

@@ -1,0 +1,19 @@
+---
+description: Run unit tests after every feature or bugfix; never ignore failures
+globs:
+alwaysApply: true
+---
+
+# Tests required
+
+After implementing a feature, bug fix, or behavior change:
+
+1. Run **`npm test`** (Jest unit suite under `__tests__/`)
+2. Run **`npm run typecheck`** when TypeScript surfaces may have changed
+3. If any test fails:
+   - **Regression:** fix the production code — do not delete or skip the test
+   - **Intentional behavior change:** update the test to match the new PRD, and update the PRD in the same change
+4. Never use `--no-verify`, skip, or `.only` to hide failures
+5. New domain logic (parsers, pickers, thresholds, store rules) should get unit tests in the same change when practical
+
+Definition of done for features includes a **green unit suite**. E2E (Detox/Maestro) is out of scope unless explicitly requested.

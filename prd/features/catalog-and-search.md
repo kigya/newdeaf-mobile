@@ -1,8 +1,9 @@
 # PRD: Catalog, search, and genres
 
 - **Status:** implemented
-- **Last updated:** 2026-07-31
-- **Related code:** `app/(tabs)/index.tsx`, `search.tsx`, `genres.tsx`, `app/genre/[slug].tsx`, `src/api/`, `src/components/MovieGrid.tsx`, `MovieCard.tsx`
+- **Last updated:** 2026-08-01
+- **Related code:** `app/(tabs)/index.tsx`, `search.tsx`, `genres.tsx`, `app/genre/[slug].tsx`, `src/api/`, `MovieGrid`, `MovieCard`, `ContinueWatchingRail`, `GenresBanner`
+- **Screens:** [`../screens/catalog.md`](../screens/catalog.md), [`search.md`](../screens/search.md), [`genres.md`](../screens/genres.md), [`genre-list.md`](../screens/genre-list.md)
 
 ## Problem
 
@@ -10,47 +11,51 @@ Users need to discover titles from newdeaf.top inside the app without opening a 
 
 ## Goals
 
-- Browse new releases with pagination
-- Search by query against the site
-- Browse by genre and open a genre list
+- Browse new releases with pull-to-refresh and infinite pagination
+- Continue Watching rail with online/offline routing
+- Search by query (min 4 chars; TMDB RU bridge for Latin/EN)
+- Browse by genre (hidden tab + genre list)
 - Navigate from a poster/card to movie details
 
 ## Non-goals
 
 - Personalized recommendations
 - Server-side user history sync
+- Offline catalog cache (roadmap)
 - Replacing the site’s catalog taxonomy
 
 ## User stories
 
 1. As a viewer, I want to scroll new releases, so that I can find something recent.
-   - **Acceptance:** Catalog tab loads a grid; further pages load on demand without losing prior items incorrectly.
+   - **Acceptance:** Catalog loads a grid; further pages append; refresh replaces page 1; races discarded.
 2. As a viewer, I want to search by title, so that I can find a known movie.
-   - **Acceptance:** Search tab submits a query and shows results or an empty state; errors are visible.
+   - **Acceptance:** Submit shows results or empty/error; under 4 chars shows min-length error without treating as success.
 3. As a viewer, I want to open a genre, so that I can browse that category.
-   - **Acceptance:** Genres tab lists genres; selecting one opens `genre/[slug]` with a movie grid.
+   - **Acceptance:** Genres list from local `GENRES`; selecting opens `genre/[slug]` with paginated grid; `serialy` forces `isSeries`.
 
 ## Edge cases & states
 
 | State | Expected behavior |
 |-------|-------------------|
-| Loading | Non-blocking loading indicator / skeleton consistent with existing screens |
-| Empty | EmptyState with clear copy via `t()` |
-| Error / offline | Error message; user can retry where the screen already supports it |
-| Bad HTML / parse failure | Surface failure; do not crash the tab root |
+| Loading | Grid spinner; catalog header still shown |
+| Empty | EmptyState via `t()` |
+| Error / offline | Error banner/message; retry via refresh where supported |
+| Race / stale response | Discarded via request id |
+| Duplicate ids on append | Filtered |
+| Genre error | Banner; pagination blocked while error set |
+| Continue stale offline | Clear progress; open movie detail |
+| Bad HTML / parse failure | Surface failure; do not crash tab root |
+| EN/Latin search | TMDB bridge → RU title; empty → retry original |
 
 ## Technical context
 
-- Remote data: `src/api/client.ts`, `catalog.ts`, `parse.ts` — `fetch` + HTML parse, `BASE_URL = https://newdeaf.top`
-- Encoding: win1251 handling in the API layer must be preserved
-- UI: virtualized grid via shared MovieGrid/MovieCard; theme + i18n
-- See skill: `.cursor/skills/newdeaf-ui`, `.cursor/skills/newdeaf-performance`
-
-## Open questions
-
-- None for baseline (document new ones when changing scrape contract)
+- Remote: `src/api/client.ts`, `catalog.ts`, `parse.ts` — scrape `BASE_URL`
+- Encoding: win1251 preserved
+- UI: virtualized MovieGrid; theme + i18n
+- Skills: `.cursor/skills/newdeaf-ui`, `newdeaf-performance`
+- APIs: [`../apis-and-integrations.md`](../apis-and-integrations.md)
 
 ## Out of scope
 
-- NativeWind / React Query introduction
-- Caching layer beyond what the screens already do
+- NativeWind / React Query
+- Caching layer beyond in-screen state

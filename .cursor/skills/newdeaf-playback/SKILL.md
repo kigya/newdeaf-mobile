@@ -22,6 +22,9 @@ Do not collapse these into one player without an explicit product decision.
 - Downloads: `src/downloads/` — quality + audio track selection, HLS and progressive paths, YouTube via `youtubei.js` (`src/downloads/youtube.ts`).
 - Android background work: `react-native-background-actions` + config plugin `plugins/withDownloadForegroundService.js` + notification permissions (`expo-notifications`).
 - WebView has a **patch-package** patch under `patches/` — do not upgrade webview casually or drop the patch.
+- CDN: prefer `MediaFetchHost` WebView Chrome fetch (OkHttp often 403 on vkvideo.cloud).
+- Interrupt: hydrate marks in-flight downloads `failed` + interrupted; movie Retry re-resolves and **wipes** partial dir (signed URLs expire). Movie jobs are serialized; YouTube is not on that chain.
+- Settings `preferredDownloadQuality` seeds sheets only; online WebView quality stays site-controlled.
 
 ## Rules
 
@@ -30,6 +33,7 @@ Do not collapse these into one player without an explicit product decision.
 3. Keep subtitle (VTT) handling in the offline path; do not assume WebView and expo-video share the same subtitle API.
 4. Metro already special-cases youtubei.js platform entry — follow `metro.config.js` if changing YouTube imports.
 5. Movie detail entry: `app/movie/[id].tsx` — wire play/download actions through existing sheets (`DownloadSheet`, `YoutubeDownloadSheet`).
+6. Read `prd/screens/online-player.md`, `offline-player.md`, `downloads.md` and `prd/behavior/cross-cutting.md` before changing playback/download behavior; run `npm test` after.
 
 ## Key paths
 

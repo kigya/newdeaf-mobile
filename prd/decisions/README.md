@@ -1,21 +1,10 @@
-# Architecture decisions
+# Architecture Decision Records
 
-Record cross-cutting technical choices here so product PRDs stay focused on user outcomes.
+| ADR | Title |
+|-----|-------|
+| [2026-08-01-scrape-over-rest-catalog.md](2026-08-01-scrape-over-rest-catalog.md) | Scrape newdeaf.top instead of REST catalog |
+| [2026-08-01-webview-online-expo-video-offline.md](2026-08-01-webview-online-expo-video-offline.md) | WebView online vs expo-video offline |
+| [2026-08-01-sqlite-local-first.md](2026-08-01-sqlite-local-first.md) | SQLite local-first user data |
+| [2026-08-01-jest-unit-tests.md](2026-08-01-jest-unit-tests.md) | Jest unit tests for domain logic |
 
-## When to add an ADR
-
-- Choosing or changing persistence, player architecture, scrape vs API, or native plugin approach
-- Any decision that future agents would otherwise re-litigate
-
-## Process
-
-1. Copy [`_template.md`](_template.md)
-2. Name the file `YYYY-MM-DD-short-title.md`
-3. Link it from the related feature PRD under Technical context
-4. Prefer one decision per ADR
-
-## Index
-
-| Date | Decision | File |
-|------|----------|------|
-| _(none yet)_ | | |
+Use [`_template.md`](_template.md) for new ADRs.

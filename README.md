@@ -28,6 +28,12 @@ Start Metro for development:
 npm start
 ```
 
+Unit tests (Jest):
+
+```bash
+npm test
+```
+
 For a standalone build that includes the JavaScript bundle and does not depend on Metro:
 
 ```bash
@@ -40,10 +46,11 @@ The release variant in this project is signed with the local debug key and is in
 
 ## Features
 
-- New releases catalog with pagination
+- New releases catalog with pagination and Continue Watching
 - Search and genre filters
-- Movie details: description, KP/IMDb ratings
+- Movie details: description, KP/IMDb ratings, Kinopoisk/TMDB enrichment
 - Online playback with quality / audio track / subtitles (site player)
-- Download selected quality and audio track + subtitles
+- Download selected quality and audio track + subtitles (default quality in Settings)
 - Offline playback of downloaded movies with subtitles
+- Favorites, watch progress, Settings (language ru/en)
 - Tablet-friendly layout

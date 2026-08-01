@@ -18,8 +18,11 @@ Local-first, no cloud sync. Feature folders own their state:
 | Downloads | `src/downloads/` | Queue, metadata, file paths, FGS hooks |
 | Favorites | `src/favorites/` | Saved movies |
 | Watch progress | `src/watch-progress/` | Resume positions |
+| Settings | `src/settings/` | Locale SSOT, default download quality |
 
-Each feature uses **`types.ts` + `db.ts` + `store.ts`**. SQLite DB file: `newdeaf.db` via expo-sqlite.
+Each feature uses **`types.ts` + `db.ts` + `store.ts`** (settings also has `pickPreferredQuality.ts`). SQLite DB file: `newdeaf.db` via expo-sqlite.
+
+Behavior contracts: `prd/behavior/cross-cutting.md`, `prd/screens/`, `prd/features/`. After changes run `npm test`.
 
 ## Rules
 

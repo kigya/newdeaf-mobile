@@ -1,52 +1,57 @@
 # PRD: Favorites and watch progress
 
 - **Status:** implemented
-- **Last updated:** 2026-07-31
-- **Related code:** `app/(tabs)/favorites.tsx`, `src/favorites/`, `src/watch-progress/`, hydration in `app/_layout.tsx`
+- **Last updated:** 2026-08-01
+- **Related code:** `app/(tabs)/favorites.tsx`, `src/favorites/`, `src/watch-progress/`, Continue Watching on catalog, hydration in `app/_layout.tsx`
+- **Screens:** [`../screens/favorites.md`](../screens/favorites.md), catalog/player screens for progress UX
 
 ## Problem
 
-Users need a local shortlist of titles and the ability to resume where they left off without creating an account.
+Users need a local shortlist and resume-where-left-off without an account.
 
 ## Goals
 
-- Add/remove favorites; list them on the Favorites tab
-- Persist favorites across app restarts (SQLite)
-- Record and restore watch progress for supported playback paths
-- Hydrate favorites and watch-progress stores at launch with downloads
+- Add/remove favorites; list on Favorites tab; persist SQLite
+- Record and restore watch progress for online WebView and offline expo-video
+- Continue Watching rail on catalog
+- Hydrate favorites and watch-progress at launch (after settings)
 
 ## Non-goals
 
-- Cross-device sync or cloud backup of favorites/progress
-- Social sharing of lists
-- Accurate progress for arbitrary third-party WebView internal state beyond what the app already records
+- Cross-device sync
+- Social sharing
+- Perfect progress for arbitrary third-party WebView internals beyond hooked progress
 
 ## User stories
 
-1. As a viewer, I want to favorite a title, so that I can find it quickly later.
-   - **Acceptance:** Favorite state persists after kill/relaunch; Favorites tab shows saved items.
-2. As a viewer, I want watch progress saved, so that I can resume.
-   - **Acceptance:** Progress is written via `src/watch-progress/` and available after relaunch for flows that already integrate it.
+1. As a viewer, I want to favorite a title.
+   - **Acceptance:** Persists after kill; Favorites tab shows items; double-tap safe.
+2. As a viewer, I want watch progress saved.
+   - **Acceptance:** Written via `src/watch-progress/`; resume dialogs on movie detail and offline player when resumable.
+3. As a viewer, I want finished titles to leave Continue Watching.
+   - **Acceptance:** Completed upsert deletes the row.
 
 ## Edge cases & states
 
 | State | Expected behavior |
 |-------|-------------------|
-| Empty favorites | EmptyState with i18n copy |
-| Duplicate favorite | Idempotent add (no duplicate rows / stable UX) |
-| Progress for missing movie | Ignore or clear stale rows without crashing |
-| Hydration race | UI waits on store hydrate; no false empty flash if already handled |
+| Empty favorites | EmptyState i18n |
+| Duplicate favorite | Idempotent upsert; preserve `createdAt` |
+| Hydration race | `mutationGeneration` / UI waits on hydrate |
+| position &lt; 30s | Not resumable |
+| ≥90% or near-end (≥15min &amp; &lt;120s left) | Completed → delete |
+| Bad short duration from WebView | `sanitizeDurationSec` drops it |
+| Offline episode movieId | Strip `_sN_eM` for catalog key |
+| Stale offline continue | Clear progress; open detail |
+| saveGeneration | Higher wins; stale async ignored |
 
 ## Technical context
 
-- Modules: `src/favorites/{types,db,store}.ts`, `src/watch-progress/{types,db,store}.ts`
-- Launch hydrate: `app/_layout.tsx` calls `hydrate` on downloads, favorites, watch-progress after fonts load
-- Skill: `.cursor/skills/newdeaf-local-data`
-
-## Open questions
-
-- None for baseline
+- `src/favorites/{types,db,store}.ts`, `src/watch-progress/{types,db,store,format}.ts`
+- Constants and pure helpers in `watch-progress/types.ts` are unit-tested
+- Skill: `newdeaf-local-data`
+- Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)
 
 ## Out of scope
 
-- Account-linked continue-watching rails
+- Account-linked continue-watching cloud rails
