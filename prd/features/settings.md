@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `app/(tabs)/settings.tsx`, `src/settings/`, `src/i18n/`, `DownloadSheet`, `YoutubeDownloadSheet`
+- **Related code:** `app/(tabs)/settings.tsx`, `src/features/settings/`, `src/shared/i18n/`, `DownloadSheet`, `YoutubeDownloadSheet`
 - **Screens:** [`../screens/settings.md`](../screens/settings.md)
 
 ## Problem
@@ -47,7 +47,7 @@ Users need to choose app language and a default download quality without repeati
 
 ## Technical context
 
-- `src/settings/` — types + db + Zustand store + `pickPreferredQuality`
+- `src/features/settings/` — types + db + Zustand store + `pickPreferredQuality`
 - Hydrated first in `app/_layout.tsx`
 - Skills: `newdeaf-local-data`, `newdeaf-ui`
 - Behavior: [`../behavior/cross-cutting.md`](../behavior/cross-cutting.md)
@@ -55,3 +55,7 @@ Users need to choose app language and a default download quality without repeati
 ## Out of scope
 
 - Theme / dark-mode toggle (app is dark by design)
+
+## Acceptance
+
+- Attribution footer with linked kigya GitHub repo is visible on Settings

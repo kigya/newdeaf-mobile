@@ -8,3 +8,4 @@
 | [2026-08-01-jest-unit-tests.md](2026-08-01-jest-unit-tests.md) | Jest unit tests for domain logic |
 
 Use [`_template.md`](_template.md) for new ADRs.
+- [2026-08-01-layered-src-layout.md](2026-08-01-layered-src-layout.md)

@@ -31,8 +31,8 @@ Before “optimizing”:
 
 ## Key paths to review
 
-- Grids/lists: `src/components/MovieGrid.tsx`, `MovieCard.tsx`, tab screens under `app/(tabs)/`
-- Stores: `src/downloads/store.ts`, `src/favorites/store.ts`, `src/watch-progress/store.ts`
+- Grids/lists: `src/shared/ui/MovieGrid.tsx`, `MovieCard.tsx`, screen modules under `src/screens/`
+- Stores: `src/features/downloads/store.ts`, `src/features/favorites/store.ts`, `src/features/watch-progress/store.ts`
 - Motion: Moti usage in components; Reanimated 4 + worklets already in dependencies
 
 ## Anti-patterns

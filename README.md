@@ -83,7 +83,7 @@ Default download quality comes from Settings (`best` · `1080` · `720` · `480`
 | Framework | Expo **57**, React Native **0.86**, React **19** |
 | Language | TypeScript (strict), `@/*` path aliases |
 | Routing | Expo Router (file-based) |
-| UI | RN `StyleSheet` + tokens in `src/theme/` (Montserrat) |
+| UI | RN `StyleSheet` + tokens in `src/shared/theme/` (Montserrat) |
 | Motion | Moti + Reanimated |
 | State | Zustand |
 | Persistence | expo-sqlite (`newdeaf.db`), expo-file-system for media |
@@ -100,7 +100,7 @@ Default download quality comes from Settings (`best` · `1080` · `720` · `480`
 
 | Source | Role |
 |--------|------|
-| **[newdeaf.top](https://newdeaf.top)** | Catalog, search, details, and player HTML — scraped with plain `fetch` (`src/api/`). **Source of truth for titles.** |
+| **[newdeaf.top](https://newdeaf.top)** | Catalog, search, details, and player HTML — scraped with plain `fetch` (`src/data/catalog/`). **Source of truth for titles.** |
 | **TMDB** | Optional localized title/plot/cast; Russian title bridge for Latin search queries |
 | **Kinopoisk Unofficial** | Optional facts, cast photos, awards, similar titles on the detail screen |
 | **YouTube** (Piped → Invidious → youtubei.js) | Resolve streams for the YouTube download path |

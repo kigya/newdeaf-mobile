@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/(tabs)/downloads`
-- **Related code:** `app/(tabs)/downloads.tsx`, `src/downloads/`, `YoutubeDownloadSheet`, `StreamResolver`
+- **Related code:** `app/(tabs)/downloads.tsx` → `src/screens/downloads/`, `src/features/downloads/`, `YoutubeDownloadSheet`, `StreamResolver`
 
 ## Purpose
 

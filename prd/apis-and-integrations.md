@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `src/api/`, `src/downloads/youtube.ts`, `src/downloads/MediaFetchHost.tsx`, `src/player/`
+- **Related code:** `src/data/catalog/`, `src/features/downloads/youtube.ts`, `src/features/downloads/MediaFetchHost.tsx`, `src/features/playback/`
 
 ## Principle
 
@@ -14,9 +14,9 @@
 
 | Item | Value |
 |------|--------|
-| Base URL | `https://newdeaf.top` (`src/api/types.ts`) |
-| Client | `src/api/client.ts` — `fetchHtml`, `absolutize`, `stripTags` |
-| Encoding | Prefer UTF-8 when charset/BOM says so; otherwise **windows-1251** (`src/api/win1251.ts`) |
+| Base URL | `https://newdeaf.top` (`src/data/catalog/types.ts`) |
+| Client | `src/data/catalog/client.ts` — `fetchHtml`, `absolutize`, `stripTags` |
+| Encoding | Prefer UTF-8 when charset/BOM says so; otherwise **windows-1251** (`src/data/catalog/win1251.ts`) |
 | Headers | Mobile Chrome UA; `Accept-Language: ru-RU…`; `Referer: BASE_URL/` |
 | Errors | Non-OK HTTP → thrown `Error` with status; callers surface UI errors |
 
@@ -31,7 +31,7 @@
 | `fetchPlayerFileList(playerUrl)` | GET player HTML (20s abort) | returns `null` on any failure |
 | `getGenres()` | static `GENRES` in types | **no network** |
 
-### Parse contract highlights (`src/api/parse.ts`)
+### Parse contract highlights (`src/data/catalog/parse.ts`)
 
 - Catalog: only `.short-cols` cards (ignore sidebar popular). Thin-page fallback if `<4` cards. `hasMore` from `.navigation` or `items.length >= 20`.
 - Search: reject site “less than 4 chars” / suspended messages via `t('catalogApi.minSearch')`.
@@ -43,7 +43,7 @@
 
 ---
 
-## 2. TMDB (`src/api/tmdb.ts`)
+## 2. TMDB (`src/data/catalog/tmdb.ts`)
 
 | Item | Detail |
 |------|--------|
@@ -54,7 +54,7 @@
 
 ---
 
-## 3. Kinopoisk Unofficial (`src/api/kinopoisk.ts`)
+## 3. Kinopoisk Unofficial (`src/data/catalog/kinopoisk.ts`)
 
 | Item | Detail |
 |------|--------|
@@ -66,7 +66,7 @@
 
 ---
 
-## 4. YouTube resolve (`src/downloads/youtube.ts`)
+## 4. YouTube resolve (`src/features/downloads/youtube.ts`)
 
 | Item | Detail |
 |------|--------|
@@ -82,7 +82,7 @@
 | Item | Detail |
 |------|--------|
 | Host | `MediaFetchHost` — hidden iframe under `https://newdeaf.top/` (required for bnsi/Borth session cookies) |
-| Store | `useMediaFetchStore` in `src/downloads/mediaFetch.ts` (memory only) |
+| Store | `useMediaFetchStore` in `src/features/downloads/mediaFetch.ts` (memory only) |
 | Why | OkHttp often gets **403** on `vkvideo.cloud`; WebView Chrome fetch preferred for HLS playlists/segments |
 | Injector ownership | `host` vs `resolve` — StreamResolver / download jobs register carefully |
 

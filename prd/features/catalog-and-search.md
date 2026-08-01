@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `app/(tabs)/index.tsx`, `search.tsx`, `genres.tsx`, `app/genre/[slug].tsx`, `src/api/`, `MovieGrid`, `MovieCard`, `ContinueWatchingRail`, `GenresBanner`
+- **Related code:** `app/(tabs)/index.tsx` → `src/screens/catalog/`, `search.tsx`, `genres.tsx`, `app/genre/[slug].tsx`, `src/data/catalog/`, `MovieGrid`, `MovieCard`, `ContinueWatchingRail`, `GenresBanner`
 - **Screens:** [`../screens/catalog.md`](../screens/catalog.md), [`search.md`](../screens/search.md), [`genres.md`](../screens/genres.md), [`genre-list.md`](../screens/genre-list.md)
 
 ## Problem
@@ -49,7 +49,7 @@ Users need to discover titles from newdeaf.top inside the app without opening a 
 
 ## Technical context
 
-- Remote: `src/api/client.ts`, `catalog.ts`, `parse.ts` — scrape `BASE_URL`
+- Remote: `src/data/catalog/client.ts`, `catalog.ts`, `parse.ts` — scrape `BASE_URL`
 - Encoding: win1251 preserved
 - UI: virtualized MovieGrid; theme + i18n
 - Skills: `.cursor/skills/newdeaf-ui`, `newdeaf-performance`

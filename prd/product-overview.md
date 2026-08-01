@@ -11,7 +11,7 @@ NewDeaf is a native mobile client for [newdeaf.top](https://newdeaf.top). Users 
 ## Users
 
 - People who already use newdeaf.top and want a mobile-native catalog, search, downloads, and offline library
-- Primary locale: Russian UI with English fallback (`src/i18n/`, Settings SSOT)
+- Primary locale: Russian UI with English fallback (`src/shared/i18n/`, Settings SSOT)
 
 ## Current capabilities
 
@@ -24,7 +24,7 @@ NewDeaf is a native mobile client for [newdeaf.top](https://newdeaf.top). Users 
 - Download selected quality + audio + subtitles (HLS / progressive); YouTube download path
 - Offline playback with local VTT subtitles
 - Favorites and watch progress persisted in SQLite
-- Settings: language (ru/en), default download quality, app version footer
+- Settings: language (ru/en), default download quality, app version footer, Made by kigya attribution
 - Tablet-friendly layout via `useBreakpoint` / window dimensions
 
 ## Product boundaries
@@ -57,10 +57,11 @@ Detailed per-route behavior lives under [`screens/`](screens/). Cross-cutting ru
 ## Definition of done (features)
 
 1. Behavior matches the relevant PRDs under `features/` and `screens/`
-2. User-facing copy goes through `t()`; styling uses `src/theme`
-3. **`npm test` passes** (unit suite under `__tests__/`)
-4. `npm run typecheck` passes
-5. If behavior changed intentionally, update the PRD in the same change set
+2. User-facing copy goes through `t()`; styling uses `src/shared/theme`
+3. Code follows layered `src/` (`shared` / `data` / `features` / `screens`) and project skills
+4. **`npm test`** and **`npm run test:coverage`** pass (100% on `src/**`)
+5. `npm run typecheck` passes
+6. If behavior changed intentionally, update the PRD in the same change set
 
 ## Stack pointer
 

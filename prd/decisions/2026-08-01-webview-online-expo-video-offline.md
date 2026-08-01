@@ -10,7 +10,7 @@ Site streams use proprietary balancers, tokens, and player UIs (quality/audio/su
 ## Decision
 
 - **Online:** site player in `react-native-webview` (`PlayerWebView`), with stream capture for downloads
-- **Offline:** `expo-video` + local playlists/files (`MediaPlayer`, `src/offline/`)
+- **Offline:** `expo-video` + local playlists/files (`MediaPlayer`, `src/features/playback/offline/`)
 
 ## Consequences
 

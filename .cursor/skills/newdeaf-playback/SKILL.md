@@ -11,15 +11,15 @@ description: >-
 
 ## Dual playback paths
 
-1. **Online** — site stloadi (or equivalent) player inside `react-native-webview` (`src/player/PlayerWebView.tsx`, route `app/player/[id].tsx`). Quality / audio / subs are controlled by the site player UI.
-2. **Offline** — local media via `expo-video` (`src/player/MediaPlayer.tsx`, `src/offline/`, route `app/offline/[downloadId].tsx`) with downloaded HLS/progressive + VTT subs.
+1. **Online** — site stloadi (or equivalent) player inside `react-native-webview` (`src/features/playback/PlayerWebView.tsx`, route `app/player/[id].tsx` → `src/screens/online-player/`). Quality / audio / subs are controlled by the site player UI.
+2. **Offline** — local media via `expo-video` (`src/features/playback/MediaPlayer.tsx`, `src/features/playback/offline/`, route `app/offline/[downloadId].tsx` → `src/screens/offline-player/`) with downloaded HLS/progressive + VTT subs.
 
 Do not collapse these into one player without an explicit product decision.
 
 ## Stream & download pipeline
 
-- Resolve playable URLs through existing player helpers (`src/player/StreamResolver.tsx` and related).
-- Downloads: `src/downloads/` — quality + audio track selection, HLS and progressive paths, YouTube via `youtubei.js` (`src/downloads/youtube.ts`).
+- Resolve playable URLs through existing player helpers (`src/features/playback/StreamResolver.tsx` and related).
+- Downloads: `src/features/downloads/` — quality + audio track selection, HLS and progressive paths, YouTube via `youtubei.js` (`src/features/downloads/youtube.ts`).
 - Android background work: `react-native-background-actions` + config plugin `plugins/withDownloadForegroundService.js` + notification permissions (`expo-notifications`).
 - WebView has a **patch-package** patch under `patches/` — do not upgrade webview casually or drop the patch.
 - CDN: prefer `MediaFetchHost` WebView Chrome fetch (OkHttp often 403 on vkvideo.cloud).
@@ -28,20 +28,20 @@ Do not collapse these into one player without an explicit product decision.
 
 ## Rules
 
-1. Preserve referer / headers expectations when fetching from `newdeaf.top` (see `src/api/client.ts`).
+1. Preserve referer / headers expectations when fetching from `newdeaf.top` (see `src/data/catalog/client.ts`).
 2. Offline playback must work without Metro and without network for already-downloaded assets.
 3. Keep subtitle (VTT) handling in the offline path; do not assume WebView and expo-video share the same subtitle API.
 4. Metro already special-cases youtubei.js platform entry — follow `metro.config.js` if changing YouTube imports.
-5. Movie detail entry: `app/movie/[id].tsx` — wire play/download actions through existing sheets (`DownloadSheet`, `YoutubeDownloadSheet`).
+5. Movie detail entry: `app/movie/[id].tsx` → `src/screens/movie-detail/` — wire play/download actions through existing sheets (`DownloadSheet`, `YoutubeDownloadSheet` in `src/shared/ui/`).
 6. Read `prd/screens/online-player.md`, `offline-player.md`, `downloads.md` and `prd/behavior/cross-cutting.md` before changing playback/download behavior; run `npm test` after.
 
 ## Key paths
 
-- Online player route: `app/player/[id].tsx`
-- Offline player route: `app/offline/[downloadId].tsx`
-- Player components: `src/player/`
-- Offline helpers: `src/offline/`
-- Downloads: `src/downloads/`
+- Online player route: `app/player/[id].tsx` / `src/screens/online-player/`
+- Offline player route: `app/offline/[downloadId].tsx` / `src/screens/offline-player/`
+- Player components: `src/features/playback/`
+- Offline helpers: `src/features/playback/offline/`
+- Downloads: `src/features/downloads/`
 - Patch: `patches/react-native-webview+13.16.1.patch`
 
 ## Anti-patterns

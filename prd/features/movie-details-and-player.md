@@ -2,7 +2,7 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-01
-- **Related code:** `app/movie/[id].tsx`, `app/player/[id].tsx`, `src/player/`, `src/api/kinopoisk.ts`, `src/api/tmdb.ts`, `DownloadSheet`, `YoutubeDownloadSheet`
+- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `app/player/[id].tsx`, `src/features/playback/`, `src/data/catalog/kinopoisk.ts`, `src/data/catalog/tmdb.ts`, `DownloadSheet`, `YoutubeDownloadSheet`
 - **Screens:** [`../screens/movie-detail.md`](../screens/movie-detail.md), [`online-player.md`](../screens/online-player.md)
 
 ## Problem

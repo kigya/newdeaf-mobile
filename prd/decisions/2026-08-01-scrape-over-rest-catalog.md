@@ -9,7 +9,7 @@ NewDeaf needs catalog, search, and detail data. There is no official public NewD
 
 ## Decision
 
-Use `fetch` + HTML parsing (`src/api/`) against `https://newdeaf.top`. Preserve windows-1251 handling and site search form encoding.
+Use `fetch` + HTML parsing (`src/data/catalog/`) against `https://newdeaf.top`. Preserve windows-1251 handling and site search form encoding.
 
 ## Consequences
 

@@ -3,11 +3,11 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-01
 - **Route:** `/(tabs)/settings`
-- **Related code:** `app/(tabs)/settings.tsx`, `src/settings/`, `src/i18n/`
+- **Related code:** `app/(tabs)/settings.tsx` → `src/screens/settings/SettingsScreen.tsx`, `src/features/settings/`, `src/shared/i18n/`
 
 ## Purpose
 
-Configure app language and default download quality; show app version.
+Configure app language and default download quality; show app version and author attribution.
 
 ## Options
 
@@ -28,6 +28,11 @@ Configure app language and default download quality; show app version.
 - User can still override quality **per download** in the sheet
 - Applies to movies the user wants to watch/download only as a **default preference for download sheets** — online WebView player quality remains controlled by the site player UI
 
+### Attribution footer
+
+- Below the version line: `t('settings.madeBy')` + linked `t('settings.madeByLink')` (`kigya`)
+- Link opens `https://github.com/kigya/newdeaf-mobile` via `Linking.openURL`
+
 ### Version footer
 
 - Displayed at bottom: `t('settings.version', { version })`
@@ -44,3 +49,4 @@ Always interactive after root hydrate (no loading/error UI on this screen).
 - OS language change + resume updates app locale; unchanged OS keeps manual choice
 - Preferred quality seeds download sheets; sheets still allow override
 - Version string is visible and matches app config when available
+- Attribution “Made by kigya” is visible; tapping kigya opens the GitHub repository
