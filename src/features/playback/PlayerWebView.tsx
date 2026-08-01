@@ -11,9 +11,8 @@ import {
 } from '@/src/features/downloads/mediaFetch';
 import { t } from '@/src/shared/i18n';
 import { colors } from '@/src/shared/theme';
+import { CHROME_ANDROID_USER_AGENT as USER_AGENT } from '@/src/shared/lib/userAgent';
 
-const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 export type PlayerProgressPayload = {
   currentTime: number;

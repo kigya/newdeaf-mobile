@@ -233,4 +233,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 13,
   },
+  madeBy: {
+    marginTop: spacing.sm,
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+  },
+  madeByLink: {
+    color: colors.accent,
+    fontFamily: fonts.semiBold,
+    textDecorationLine: 'underline',
+  },
 });
