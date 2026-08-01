@@ -22,6 +22,7 @@ import {
   listSeasons,
   pickEpisodeEntry,
 } from '@/src/api/parse';
+import { enrichMovieMetadata } from '@/src/api/tmdb';
 import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/api/types';
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
 import { DownloadSheet } from '@/src/components/DownloadSheet';
@@ -29,7 +30,7 @@ import { listCompletedDownloads } from '@/src/downloads/match';
 import { useDownloadsStore } from '@/src/downloads/store';
 import { useFavoritesStore } from '@/src/favorites/store';
 import { useBreakpoint } from '@/src/hooks/useBreakpoint';
-import { t } from '@/src/i18n';
+import { getLocale, t } from '@/src/i18n';
 import { StreamResolver } from '@/src/player/StreamResolver';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { resumeDialogMessage } from '@/src/watch-progress/format';
@@ -82,10 +83,37 @@ export default function MovieDetailScreen() {
         const detail = await fetchMovieDetail(href || id);
         if (cancelled) return;
         const listPoster = paramPoster && paramPoster.length > 0 ? paramPoster : undefined;
-        setMovie({
+        let next: MovieDetail = {
           ...detail,
           posterUrl: detail.posterUrl || listPoster,
-        });
+        };
+
+        // When UI is English, overlay localized title / plot / cast from TMDB.
+        if (getLocale() === 'en') {
+          try {
+            const enriched = await enrichMovieMetadata({
+              title: detail.title,
+              originalTitle: detail.originalTitle,
+              year: detail.year,
+              isSeries: detail.isSeries,
+            });
+            if (enriched) {
+              next = {
+                ...next,
+                title: enriched.title || next.title,
+                description: enriched.overview || next.description,
+                actors: enriched.actors.length ? enriched.actors : next.actors,
+                director: enriched.director || next.director,
+                originalTitle: enriched.originalTitle || next.originalTitle,
+              };
+            }
+          } catch {
+            // keep scraped Russian metadata
+          }
+        }
+
+        if (cancelled) return;
+        setMovie(next);
         if (detail.season) setSeason(detail.season);
         if (detail.episode) setEpisode(detail.episode);
         if (detail.playerUrl) {

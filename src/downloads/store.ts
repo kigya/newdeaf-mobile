@@ -21,7 +21,7 @@ type DownloadsState = {
   activeId: string | null;
   hydrate: () => Promise<void>;
   enqueue: (request: DownloadRequest) => Promise<string>;
-  enqueueYoutube: (youtubeUrl: string) => Promise<string>;
+  enqueueYoutube: (youtubeUrl: string, preferredQuality?: string) => Promise<string>;
   retry: (id: string) => Promise<void>;
   /** Finish movie retry after StreamResolver captured fresh HLS URLs. */
   completeMovieRetry: (id: string, payload: StreamPayload) => Promise<void>;
@@ -406,8 +406,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     return id;
   },
 
-  enqueueYoutube: async (youtubeUrl) => {
-    const resolved = await resolveYoutubeStream(youtubeUrl);
+  enqueueYoutube: async (youtubeUrl, preferredQuality) => {
+    const resolved = await resolveYoutubeStream(youtubeUrl, preferredQuality);
     const id = makeYoutubeId(resolved.videoId);
     const now = Date.now();
     const request: YoutubeDownloadRequest = {

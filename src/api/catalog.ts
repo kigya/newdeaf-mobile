@@ -15,7 +15,8 @@ import {
   type PlayerFileList,
 } from './types';
 import { encodeWin1251FormValue } from './win1251';
-import { t } from '@/src/i18n';
+import { resolveRussianTitleForSearch } from './tmdb';
+import { getLocale, t } from '@/src/i18n';
 
 export type CatalogPageResult = {
   items: MovieSummary[];
@@ -36,10 +37,25 @@ export async function fetchGenreMovies(genreHref: string, page = 1): Promise<Cat
 }
 
 export async function searchMovies(query: string): Promise<MovieSummary[]> {
+  const trimmed = query.trim();
+  let story = trimmed;
+
+  // newdeaf search works best with Russian titles — bridge EN/Latin queries via TMDB.
+  if (getLocale() === 'en' || !/[\u0400-\u04FF]/.test(trimmed)) {
+    try {
+      const ruTitle = await resolveRussianTitleForSearch(trimmed);
+      if (ruTitle && ruTitle.trim().length >= 2) {
+        story = ruTitle.trim();
+      }
+    } catch {
+      // keep original query
+    }
+  }
+
   const body = [
     'do=search',
     'subaction=search',
-    `story=${encodeWin1251FormValue(query)}`,
+    `story=${encodeWin1251FormValue(story)}`,
     'titleonly=3',
   ].join('&');
 
@@ -55,7 +71,29 @@ export async function searchMovies(query: string): Promise<MovieSummary[]> {
     throw new Error(t('catalogApi.minSearch'));
   }
 
-  return parseSearchResults(html);
+  const results = parseSearchResults(html);
+
+  // If bridged search returned nothing, retry with the original user query.
+  if (!results.length && story !== trimmed) {
+    const fallbackBody = [
+      'do=search',
+      'subaction=search',
+      `story=${encodeWin1251FormValue(trimmed)}`,
+      'titleonly=3',
+    ].join('&');
+    const fallbackHtml = await fetchHtml(`${BASE_URL}/index.php?do=search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: fallbackBody,
+    });
+    if (!/менее\s+4\s+символ/i.test(fallbackHtml) && !/поиск был приостановлен/i.test(fallbackHtml)) {
+      return parseSearchResults(fallbackHtml);
+    }
+  }
+
+  return results;
 }
 
 export async function fetchMovieDetail(hrefOrId: string): Promise<MovieDetail> {
