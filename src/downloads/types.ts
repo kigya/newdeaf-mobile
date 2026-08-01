@@ -1,4 +1,4 @@
-export type DownloadStatus = 'queued' | 'resolving' | 'downloading' | 'completed' | 'failed' | 'paused';
+export type DownloadStatus = 'queued' | 'resolving' | 'downloading' | 'completed' | 'failed';
 
 export type DownloadSource = 'movie' | 'youtube';
 

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -26,6 +26,7 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const hasQuery = query.trim().length > 0;
 
   useEffect(() => {
@@ -45,19 +46,33 @@ export default function SearchScreen() {
       return;
     }
     Keyboard.dismiss();
+    const reqId = ++requestIdRef.current;
     setLoading(true);
     setSearched(true);
     setError(null);
     try {
       const items = await searchMovies(q);
+      if (reqId !== requestIdRef.current) return;
       setMovies(items);
     } catch (e) {
+      if (reqId !== requestIdRef.current) return;
       setError(e instanceof Error ? e.message : t('search.error'));
       setMovies([]);
     } finally {
-      setLoading(false);
+      if (reqId === requestIdRef.current) setLoading(false);
     }
   };
+
+  const emptyTitle = error
+    ? t('search.error')
+    : searched
+      ? t('search.emptyNone')
+      : t('search.emptyStart');
+  const emptySubtitle = error
+    ? error
+    : searched
+      ? t('search.emptyNoneSub')
+      : t('search.emptyStartSub', { count: MIN_QUERY_LENGTH });
 
   return (
     <Screen title={t('search.title')} subtitle={t('search.subtitle')}>
@@ -92,14 +107,8 @@ export default function SearchScreen() {
         movies={movies}
         loading={loading}
         getWatchProgress={getWatchProgress}
-        emptyTitle={searched ? t('search.emptyNone') : t('search.emptyStart')}
-        emptySubtitle={
-          error
-            ? error
-            : searched
-              ? t('search.emptyNoneSub')
-              : t('search.emptyStartSub', { count: MIN_QUERY_LENGTH })
-        }
+        emptyTitle={emptyTitle}
+        emptySubtitle={emptySubtitle}
       />
     </Screen>
   );

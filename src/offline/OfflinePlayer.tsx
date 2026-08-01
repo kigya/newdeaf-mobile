@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import {
   MediaPlayer,
   type MediaProgressPayload,
 } from '@/src/player/MediaPlayer';
 import { prepareLocalPlaybackUri } from '@/src/offline/prepareLocalSource';
-import { colors } from '@/src/theme';
+import { t } from '@/src/i18n';
+import { colors, fonts, spacing } from '@/src/theme';
 
 export type OfflineProgressPayload = MediaProgressPayload;
 
@@ -31,22 +32,34 @@ export function OfflinePlayer({
   onClose,
 }: Props) {
   const [readyUri, setReadyUri] = useState<string | null>(null);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setReadyUri(null);
+    setPrepareError(null);
     void (async () => {
       try {
         const uri = await prepareLocalPlaybackUri(playlistPath, mediaKind);
         if (!cancelled) setReadyUri(uri);
-      } catch {
-        if (!cancelled) setReadyUri(playlistPath);
+      } catch (e) {
+        if (!cancelled) {
+          setPrepareError(e instanceof Error ? e.message : t('offline.playbackError'));
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [playlistPath, mediaKind]);
+
+  if (prepareError) {
+    return (
+      <View style={styles.loader}>
+        <Text style={styles.error}>{prepareError}</Text>
+      </View>
+    );
+  }
 
   if (!readyUri) {
     return (
@@ -76,5 +89,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.black,
+    paddingHorizontal: spacing.lg,
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

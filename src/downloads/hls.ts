@@ -287,8 +287,17 @@ export async function downloadHlsToDirectory(
   targetDir: string,
   preferredHeight: number,
   onProgress?: (progress: number) => void,
-  playerUrl?: string
+  playerUrl?: string,
+  signal?: AbortSignal
 ): Promise<DownloadHlsResult> {
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      const err = new Error('Download cancelled');
+      err.name = 'AbortError';
+      throw err;
+    }
+  };
+  throwIfAborted();
   await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
 
   const headers = mediaSegmentHeaders(playerUrl);
@@ -298,6 +307,7 @@ export async function downloadHlsToDirectory(
     preferredHeight,
     playerUrl
   );
+  throwIfAborted();
   const lines = parsePlaylistLines(content);
 
   type Job = { remoteUrl: string; localName: string };
@@ -308,10 +318,17 @@ export async function downloadHlsToDirectory(
   for (const line of lines) {
     if (line.startsWith('#')) {
       const mapUri = line.match(/URI="([^"]+)"/)?.[1];
-      if (mapUri && line.includes('EXT-X-MAP')) {
+      if (mapUri && (line.includes('EXT-X-MAP') || line.includes('EXT-X-KEY'))) {
         const abs = pickPrimaryMediaUrl(resolveUrl(variantUrl, mapUri));
-        const ext = abs.includes('.mp4') ? 'mp4' : abs.includes('.m4s') ? 'm4s' : 'bin';
-        const localName = `init_${mediaIndex}.${ext}`;
+        const isKey = line.includes('EXT-X-KEY');
+        const ext = isKey
+          ? 'key'
+          : abs.includes('.mp4')
+            ? 'mp4'
+            : abs.includes('.m4s')
+              ? 'm4s'
+              : 'bin';
+        const localName = isKey ? `key_${mediaIndex}.${ext}` : `init_${mediaIndex}.${ext}`;
         jobs.push({ remoteUrl: abs, localName });
         rewritten.push(line.replace(mapUri, localName));
         mediaIndex += 1;
@@ -337,6 +354,7 @@ export async function downloadHlsToDirectory(
   const pending: Job[] = [];
   const scanConcurrency = 16;
   for (let i = 0; i < jobs.length; i += scanConcurrency) {
+    throwIfAborted();
     const slice = jobs.slice(i, i + scanConcurrency);
     const infos = await Promise.all(
       slice.map(async (job) => {
@@ -356,9 +374,11 @@ export async function downloadHlsToDirectory(
   // OkHttp path can fan out more.
   const concurrency = isMediaFetchReady() ? 1 : 4;
   for (let i = 0; i < pending.length; i += concurrency) {
+    throwIfAborted();
     const batch = pending.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (job) => {
+        throwIfAborted();
         const filePath = `${targetDir}${job.localName}`;
         await downloadWithRetry(
           job.remoteUrl,
@@ -373,6 +393,7 @@ export async function downloadHlsToDirectory(
     onProgress?.(Math.min(doneCount, jobs.length) / (total + 1));
   }
 
+  throwIfAborted();
   // targetDir is already a file:// URI from expo-file-system — keep relative names so
   // the playlist stays portable next to the segments.
   if (!rewritten.some((l) => l.trim() === '#EXT-X-ENDLIST')) {

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { ConfirmDialog } from '@/src/components/ConfirmDialog';
@@ -27,8 +27,6 @@ function statusLabel(item: DownloadRecord): string {
       return t('downloads.completed');
     case 'failed':
       return item.error ?? t('downloads.failed');
-    case 'paused':
-      return t('downloads.paused');
     default: {
       const _exhaustive: never = item.status;
       return String(_exhaustive);
@@ -95,7 +93,7 @@ function DownloadRow({
           </Text>
           {isYoutube ? (
             <Text style={styles.line} numberOfLines={1}>
-              YouTube · {item.quality}p
+              {t('downloads.youtubeQuality', { quality: item.quality })}
             </Text>
           ) : (
             <>
@@ -217,7 +215,11 @@ export default function DownloadsScreen() {
           </View>
         ) : null}
 
-        {!items.length ? (
+        {!hydrated ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={colors.accent} />
+          </View>
+        ) : !items.length ? (
           <EmptyState title={t('downloads.emptyTitle')} subtitle={t('downloads.emptySubtitle')} />
         ) : (
           <FlatList
@@ -278,6 +280,11 @@ export default function DownloadsScreen() {
 const styles = StyleSheet.create({
   body: {
     flex: 1,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ytButton: {
     marginHorizontal: spacing.lg,

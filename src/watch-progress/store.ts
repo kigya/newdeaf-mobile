@@ -37,13 +37,20 @@ function replaceItem(
   );
 }
 
+let mutationGeneration = 0;
+
 export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
   items: [],
   hydrated: false,
   saveGenerations: {},
 
   hydrate: async () => {
+    const gen = mutationGeneration;
     const items = await listWatchProgress();
+    if (gen !== mutationGeneration) {
+      set({ items: await listWatchProgress(), hydrated: true });
+      return;
+    }
     set({ items, hydrated: true });
   },
 
@@ -56,6 +63,7 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
     get().items.find((item) => item.movieId === movieId),
 
   upsert: async (input) => {
+    mutationGeneration += 1;
     const id = makeProgressId(input.movieId, input.season, input.episode);
     const gen = input.saveGeneration;
     if (gen != null) {
@@ -93,6 +101,7 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
   },
 
   clear: async (movieId, season, episode) => {
+    mutationGeneration += 1;
     const id = makeProgressId(movieId, season, episode);
     await deleteWatchProgressForEpisode(movieId, season, episode);
     const nextGens = { ...get().saveGenerations };
@@ -104,6 +113,7 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
   },
 
   clearById: async (id) => {
+    mutationGeneration += 1;
     await deleteWatchProgress(id);
     const nextGens = { ...get().saveGenerations };
     delete nextGens[id];

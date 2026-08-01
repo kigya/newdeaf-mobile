@@ -60,7 +60,7 @@ export async function prepareLocalPlaybackUri(
     if (trimmed.startsWith('#')) {
       if (trimmed === '#EXT-X-ENDLIST') hasEndList = true;
       const mapMatch = trimmed.match(/URI="([^"]+)"/);
-      if (mapMatch && trimmed.includes('EXT-X-MAP')) {
+      if (mapMatch && (trimmed.includes('EXT-X-MAP') || trimmed.includes('EXT-X-KEY'))) {
         const abs = joinFileUri(dir, mapMatch[1]);
         out.push(trimmed.replace(`URI="${mapMatch[1]}"`, `URI="${abs}"`));
       } else {

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import BackgroundActions from 'react-native-background-actions';
 
+import { t } from '@/src/i18n';
 import { colors } from '@/src/theme';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,7 +18,7 @@ export async function startDownloadForeground(title: string): Promise<void> {
     try {
       await BackgroundActions.updateNotification({
         taskTitle: 'NewDeaf',
-        taskDesc: `Скачиваем: ${title}`,
+        taskDesc: t('downloads.fgDownloading', { title }),
       });
     } catch {
       // ignore
@@ -36,7 +37,7 @@ export async function startDownloadForeground(title: string): Promise<void> {
     await BackgroundActions.start(task, {
       taskName: 'NewDeafDownload',
       taskTitle: 'NewDeaf',
-      taskDesc: `Скачиваем: ${title}`,
+      taskDesc: t('downloads.fgDownloading', { title }),
       taskIcon: {
         name: 'ic_launcher',
         type: 'mipmap',
@@ -66,7 +67,7 @@ export async function updateDownloadForeground(
   try {
     await BackgroundActions.updateNotification({
       taskTitle: 'NewDeaf',
-      taskDesc: `Скачиваем: ${title} · ${pct}%`,
+      taskDesc: t('downloads.fgDownloadingPct', { title, pct }),
       progressBar: {
         max: 100,
         value: pct,

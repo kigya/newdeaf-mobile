@@ -14,13 +14,19 @@ type FavoritesState = {
 };
 
 const inFlight = new Set<string>();
+let mutationGeneration = 0;
 
 export const useFavoritesStore = create<FavoritesState>((set, get) => ({
   items: [],
   hydrated: false,
 
   hydrate: async () => {
+    const gen = mutationGeneration;
     const items = await listFavorites();
+    if (gen !== mutationGeneration) {
+      set({ items: await listFavorites(), hydrated: true });
+      return;
+    }
     set({ items, hydrated: true });
   },
 
@@ -31,6 +37,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       return get().isFavorite(movie.id);
     }
     inFlight.add(movie.id);
+    mutationGeneration += 1;
     try {
       const existing = get().items.find((item) => item.id === movie.id);
       if (existing) {
@@ -60,6 +67,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
   },
 
   remove: async (id) => {
+    mutationGeneration += 1;
     await deleteFavoriteRow(id);
     set({ items: get().items.filter((item) => item.id !== id) });
   },

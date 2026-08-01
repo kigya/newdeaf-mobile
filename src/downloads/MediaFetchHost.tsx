@@ -20,12 +20,13 @@ const USER_AGENT =
  */
 export function MediaFetchHost() {
   const playerUrl = useMediaFetchStore((s) => s.playerUrl);
+  const generation = useMediaFetchStore((s) => s.generation);
   const setReady = useMediaFetchStore((s) => s.setReady);
   const webRef = useRef<WebView>(null);
 
   useEffect(() => {
     if (!playerUrl) {
-      registerMediaFetchInjector(null);
+      registerMediaFetchInjector(null, 'host');
       setReady(false);
       return;
     }
@@ -35,13 +36,13 @@ export function MediaFetchHost() {
       const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode });
       const js = `(function(){try{var f=document.getElementById('nd-player');if(f&&f.contentWindow){f.contentWindow.postMessage(${JSON.stringify(payload)},'*');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:'no iframe'}));}}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:String(e&&e.message||e)}));}})();true;`;
       webRef.current?.injectJavaScript(js);
-    });
+    }, 'host');
 
     return () => {
-      registerMediaFetchInjector(null);
+      registerMediaFetchInjector(null, 'host');
       setReady(false);
     };
-  }, [playerUrl, setReady]);
+  }, [playerUrl, generation, setReady]);
 
   const html = useMemo(() => {
     if (!playerUrl) return '';
@@ -92,6 +93,7 @@ export function MediaFetchHost() {
   return (
     <View style={styles.host} pointerEvents="none" collapsable={false}>
       <WebView
+        key={`host-${generation}-${playerUrl}`}
         ref={webRef}
         source={{ html, baseUrl: 'https://newdeaf.top/' }}
         originWhitelist={['*']}

@@ -1,12 +1,12 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
 
 import { fetchGenreMovies } from '@/src/api/catalog';
 import type { MovieSummary } from '@/src/api/types';
 import { MovieGrid } from '@/src/components/MovieGrid';
 import { t } from '@/src/i18n';
-import { colors } from '@/src/theme';
+import { colors, fonts, spacing } from '@/src/theme';
 import { useWatchProgressStore } from '@/src/watch-progress/store';
 
 export default function GenreMoviesScreen() {
@@ -20,28 +20,41 @@ export default function GenreMoviesScreen() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const requestIdRef = useRef(0);
 
   const genreHref = href || `/${slug}/`;
   const forceSeries = slug === 'serialy';
 
   const load = useCallback(
     async (targetPage: number, mode: 'replace' | 'append') => {
-      const result = await fetchGenreMovies(genreHref, targetPage);
-      let appended = 0;
-      setMovies((prev) => {
-        if (mode === 'replace') return result.items;
-        const seen = new Set(prev.map((m) => m.id));
-        const next = result.items.filter((m) => !seen.has(m.id));
-        appended = next.length;
-        return [...prev, ...next];
-      });
-      if (mode === 'append' && appended === 0) {
-        setHasMore(false);
-      } else {
-        setHasMore(result.hasMore);
+      const reqId = ++requestIdRef.current;
+      try {
+        if (mode === 'replace') setError(null);
+        const result = await fetchGenreMovies(genreHref, targetPage);
+        if (reqId !== requestIdRef.current) return;
+
+        let appended = 0;
+        setMovies((prev) => {
+          if (mode === 'replace') return result.items;
+          const seen = new Set(prev.map((m) => m.id));
+          const next = result.items.filter((m) => !seen.has(m.id));
+          appended = next.length;
+          return [...prev, ...next];
+        });
+        if (mode === 'append' && appended === 0) {
+          setHasMore(false);
+        } else {
+          setHasMore(result.hasMore);
+        }
+        setPage(targetPage);
+      } catch (e) {
+        if (reqId !== requestIdRef.current) return;
+        setError(e instanceof Error ? e.message : t('common.loadingError'));
+        if (mode === 'replace') setMovies([]);
       }
-      setPage(targetPage);
     },
     [genreHref]
   );
@@ -60,19 +73,36 @@ export default function GenreMoviesScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Stack.Screen options={{ title: name ?? slug }} />
+      {error ? (
+        <Text
+          style={{
+            color: colors.danger,
+            fontFamily: fonts.medium,
+            paddingHorizontal: spacing.lg,
+            marginBottom: spacing.sm,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
       <MovieGrid
         movies={visible}
         loading={loading}
         loadingMore={loadingMore}
+        refreshing={refreshing}
         forceSeries={forceSeries}
         getWatchProgress={getWatchProgress}
+        onRefresh={() => {
+          setRefreshing(true);
+          void load(1, 'replace').finally(() => setRefreshing(false));
+        }}
         onEndReached={() => {
-          if (!hasMore || loadingMore || loading) return;
+          if (!hasMore || loadingMore || loading || refreshing || error) return;
           setLoadingMore(true);
           void load(page + 1, 'append').finally(() => setLoadingMore(false));
         }}
-        emptyTitle={t('genres.emptyTitle')}
-        emptySubtitle={t('genres.emptySubtitle')}
+        emptyTitle={error ? t('common.loadingError') : t('genres.emptyTitle')}
+        emptySubtitle={error ? error : t('genres.emptySubtitle')}
       />
     </View>
   );

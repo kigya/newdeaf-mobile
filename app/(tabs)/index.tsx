@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { fetchHomeMovies } from '@/src/api/catalog';
@@ -24,11 +24,14 @@ export default function CatalogScreen() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [pendingRemove, setPendingRemove] = useState<WatchProgressRecord | null>(null);
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async (targetPage: number, mode: 'replace' | 'append') => {
+    const reqId = ++requestIdRef.current;
     try {
       if (mode === 'replace') setError(null);
       const result = await fetchHomeMovies(targetPage);
+      if (reqId !== requestIdRef.current) return;
 
       let appended = 0;
       setMovies((prev) => {
@@ -45,6 +48,7 @@ export default function CatalogScreen() {
       }
       setPage(targetPage);
     } catch (e) {
+      if (reqId !== requestIdRef.current) return;
       setError(e instanceof Error ? e.message : t('catalog.loadError'));
     }
   }, []);
@@ -92,7 +96,7 @@ export default function CatalogScreen() {
             void load(1, 'replace').finally(() => setRefreshing(false));
           }}
           onEndReached={() => {
-            if (!hasMore || loadingMore || loading) return;
+            if (!hasMore || loadingMore || loading || refreshing) return;
             setLoadingMore(true);
             void load(page + 1, 'append').finally(() => setLoadingMore(false));
           }}

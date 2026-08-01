@@ -69,6 +69,21 @@ async function getDb() {
   return dbPromise;
 }
 
+function normalizeStatus(raw: unknown): DownloadStatus {
+  const value = String(raw ?? '');
+  if (
+    value === 'queued' ||
+    value === 'resolving' ||
+    value === 'downloading' ||
+    value === 'completed' ||
+    value === 'failed'
+  ) {
+    return value;
+  }
+  // Legacy 'paused' and unknowns → failed (pause is unimplemented).
+  return 'failed';
+}
+
 function rowToRecord(row: Record<string, unknown>): DownloadRecord {
   const sourceRaw = row.source ? String(row.source) : 'movie';
   const source: DownloadSource = sourceRaw === 'youtube' ? 'youtube' : 'movie';
@@ -83,7 +98,7 @@ function rowToRecord(row: Record<string, unknown>): DownloadRecord {
     audioLabel: String(row.audioLabel),
     quality: String(row.quality),
     subtitleLabel: String(row.subtitleLabel),
-    status: row.status as DownloadStatus,
+    status: normalizeStatus(row.status),
     progress: Number(row.progress ?? 0),
     error: row.error ? String(row.error) : undefined,
     videoDir: row.videoDir ? String(row.videoDir) : undefined,

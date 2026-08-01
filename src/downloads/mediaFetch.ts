@@ -15,8 +15,11 @@ type Pending = {
 type MediaFetchState = {
   playerUrl: string | null;
   ready: boolean;
+  /** Bumped to force MediaFetchHost / StreamResolver remount when injector was cleared. */
+  generation: number;
   setPlayerUrl: (url: string | null) => void;
   setReady: (ready: boolean) => void;
+  bumpGeneration: () => void;
 };
 
 const pending = new Map<string, Pending>();
@@ -24,18 +27,36 @@ let reqSeq = 0;
 let injectFetch:
   | ((id: string, url: string, mode: 'text' | 'bin') => void)
   | null = null;
+/** Owner token so sheet unmount does not clear Downloads/host injector. */
+let injectorOwner: string | null = null;
 
 export const useMediaFetchStore = create<MediaFetchState>((set) => ({
   playerUrl: null,
   ready: false,
+  generation: 0,
   setPlayerUrl: (playerUrl) => set({ playerUrl, ready: false }),
   setReady: (ready) => set({ ready }),
+  bumpGeneration: () => set((s) => ({ generation: s.generation + 1, ready: false })),
 }));
 
 export function registerMediaFetchInjector(
-  fn: ((id: string, url: string, mode: 'text' | 'bin') => void) | null
+  fn: ((id: string, url: string, mode: 'text' | 'bin') => void) | null,
+  owner = 'default'
 ) {
-  injectFetch = fn;
+  if (fn) {
+    injectorOwner = owner;
+    injectFetch = fn;
+    return;
+  }
+  // Only the current owner may clear the injector.
+  if (injectorOwner === owner || injectorOwner === null) {
+    injectFetch = null;
+    injectorOwner = null;
+  }
+}
+
+export function getMediaFetchInjectorOwner(): string | null {
+  return injectorOwner;
 }
 
 function armTimeout(id: string, entry: Pending) {
@@ -104,15 +125,21 @@ export function handleMediaFetchMessage(msg: {
   return true;
 }
 
-function waitUntilReady(timeoutMs: number): Promise<void> {
+function waitUntilReady(timeoutMs: number, expectedUrl?: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (useMediaFetchStore.getState().ready && injectFetch) {
+    const ok = () => {
+      const state = useMediaFetchStore.getState();
+      if (!state.ready || !injectFetch) return false;
+      if (expectedUrl && state.playerUrl !== expectedUrl) return false;
+      return true;
+    };
+    if (ok()) {
       resolve();
       return;
     }
     const started = Date.now();
     const timer = setInterval(() => {
-      if (useMediaFetchStore.getState().ready && injectFetch) {
+      if (ok()) {
         clearInterval(timer);
         resolve();
         return;
@@ -159,36 +186,36 @@ export async function webViewFetchBinary(
   return { status: result.status, base64: result.body };
 }
 
-export function isMediaFetchReady(): boolean {
-  return Boolean(
-    useMediaFetchStore.getState().playerUrl &&
-      useMediaFetchStore.getState().ready &&
-      injectFetch
-  );
+export function isMediaFetchReady(forUrl?: string): boolean {
+  const state = useMediaFetchStore.getState();
+  if (!state.playerUrl || !state.ready || !injectFetch) return false;
+  if (forUrl && state.playerUrl !== forUrl) return false;
+  return true;
 }
 
 /** Mount/reuse the hidden player WebView until CDN fetches are possible. */
 export async function ensureMediaFetchPlayer(playerUrl: string): Promise<void> {
-  if (
-    useMediaFetchStore.getState().playerUrl === playerUrl &&
-    useMediaFetchStore.getState().ready &&
-    injectFetch
-  ) {
+  const state = useMediaFetchStore.getState();
+  if (state.playerUrl === playerUrl && state.ready && injectFetch) {
     return;
   }
+  // Same URL but injector was cleared (sheet unmounted) — force remount.
+  if (state.playerUrl === playerUrl && !injectFetch) {
+    useMediaFetchStore.getState().bumpGeneration();
+    useMediaFetchStore.getState().setPlayerUrl(null);
+  }
   useMediaFetchStore.getState().setPlayerUrl(playerUrl);
-  await waitUntilReady(45000);
+  await waitUntilReady(45000, playerUrl);
 }
 
 export async function withMediaFetchPlayer<T>(
   playerUrl: string,
   task: () => Promise<T>
 ): Promise<T> {
-  // Prefer an already-warm StreamResolver iframe (same bnsi session as URL resolve).
-  if (!isMediaFetchReady()) {
+  if (!isMediaFetchReady(playerUrl)) {
     await ensureMediaFetchPlayer(playerUrl);
   } else {
-    await waitUntilReady(45000);
+    await waitUntilReady(45000, playerUrl);
   }
   return await task();
   // Do not clear playerUrl here — Downloads/DownloadSheet hosts own the WebView lifecycle.

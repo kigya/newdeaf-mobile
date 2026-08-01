@@ -32,6 +32,41 @@ type DownloadsState = {
 
 const PROGRESS_THROTTLE_MS = 250;
 
+/** Abort controllers for in-flight download jobs. */
+const abortControllers = new Map<string, AbortController>();
+/** Serialize movie HLS downloads — one shared WebView session. */
+let movieJobChain: Promise<void> = Promise.resolve();
+/** Bumped on user mutations so hydrate does not clobber fresher memory. */
+let mutationGeneration = 0;
+
+function bumpMutation() {
+  mutationGeneration += 1;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    (error instanceof Error && /cancelled/i.test(error.message))
+  );
+}
+
+function getAbortSignal(id: string): AbortSignal {
+  abortControllers.get(id)?.abort();
+  const controller = new AbortController();
+  abortControllers.set(id, controller);
+  return controller.signal;
+}
+
+function clearAbort(id: string) {
+  abortControllers.delete(id);
+}
+
+function enqueueMovieJob(task: () => Promise<void>): void {
+  movieJobChain = movieJobChain.then(task, task).catch((e) => {
+    console.warn('[downloads] movie queue error', e);
+  });
+}
+
 function makeId(movieId: string, quality: string, audioLabel: string, season?: number, episode?: number) {
   const safeAudio = audioLabel.replace(/[^\wа-яА-ЯёЁ]+/gi, '_').slice(0, 40);
   const ep =
@@ -146,9 +181,11 @@ async function failDownload(id: string, message: string) {
 }
 
 async function runDownloadJob(id: string, request: DownloadRequest, existingDir?: string) {
+  const signal = getAbortSignal(id);
   await startDownloadForeground(request.title);
   const reporter = createProgressReporter(request.title);
   try {
+    if (signal.aborted) return;
     const baseDir = existingDir ?? downloadDirForId(id);
     await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true });
 
@@ -175,6 +212,10 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     };
 
     const prior = await getDownload(id);
+    if (!prior) {
+      // Deleted while queued.
+      return;
+    }
     if (prior) {
       current = {
         ...prior,
@@ -188,6 +229,7 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       };
     }
 
+    if (signal.aborted) return;
     await persist(current);
     patchItemInStore(current, id);
 
@@ -198,6 +240,7 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
         baseDir,
         preferredHeight,
         (progress) => {
+          if (signal.aborted) return;
           current = {
             ...current,
             progress: Math.min(0.92, progress * 0.92),
@@ -206,15 +249,25 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
           };
           void reporter.report(current);
         },
-        request.playerUrl
+        request.playerUrl,
+        signal
       );
 
       await reporter.flushPending();
+      if (signal.aborted) {
+        const err = new Error('Download cancelled');
+        err.name = 'AbortError';
+        throw err;
+      }
 
       const subs = `${baseDir}subs.vtt`;
       await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
       return { playlistPath: path, subtitlePath: subs };
     });
+
+    if (signal.aborted) return;
+    const stillExists = await getDownload(id);
+    if (!stillExists) return;
 
     current = {
       ...current,
@@ -232,9 +285,15 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     await persist(current);
     patchItemInStore(current, null);
   } catch (error) {
+    if (isAbortError(error) || signal.aborted) {
+      return;
+    }
+    const stillExists = await getDownload(id);
+    if (!stillExists) return;
     const message = error instanceof Error ? error.message : t('store.downloadError');
     await failDownload(id, message);
   } finally {
+    clearAbort(id);
     await stopForegroundIfIdle();
   }
 }
@@ -244,9 +303,11 @@ async function runYoutubeDownloadJob(
   request: YoutubeDownloadRequest,
   existingDir?: string
 ) {
+  const signal = getAbortSignal(id);
   await startDownloadForeground(request.title);
   const reporter = createProgressReporter(request.title);
   try {
+    if (signal.aborted) return;
     const baseDir = existingDir ?? downloadDirForId(id);
     await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true });
 
@@ -255,9 +316,9 @@ async function runYoutubeDownloadJob(
       movieId: `yt_${request.videoId}`,
       title: request.title,
       posterUrl: request.posterUrl,
-      audioLabel: 'YouTube',
+      audioLabel: t('downloads.youtubeAudio'),
       quality: request.quality,
-      subtitleLabel: '—',
+      subtitleLabel: t('downloads.noSubtitlesDash'),
       status: 'downloading',
       progress: 0,
       videoDir: baseDir,
@@ -270,6 +331,7 @@ async function runYoutubeDownloadJob(
     };
 
     const prior = await getDownload(id);
+    if (!prior) return;
     if (prior) {
       current = {
         ...prior,
@@ -281,6 +343,7 @@ async function runYoutubeDownloadJob(
       };
     }
 
+    if (signal.aborted) return;
     await persist(current);
     patchItemInStore(current, id);
 
@@ -289,6 +352,7 @@ async function runYoutubeDownloadJob(
     if (request.mediaKind === 'progressive') {
       const dest = `${baseDir}video.mp4`;
       playlistPath = await downloadProgressiveFile(request.streamUrl, dest, (progress) => {
+        if (signal.aborted) return;
         current = {
           ...current,
           progress,
@@ -304,6 +368,7 @@ async function runYoutubeDownloadJob(
         baseDir,
         preferredHeight,
         (progress) => {
+          if (signal.aborted) return;
           current = {
             ...current,
             progress,
@@ -311,10 +376,16 @@ async function runYoutubeDownloadJob(
             updatedAt: Date.now(),
           };
           void reporter.report(current);
-        }
+        },
+        undefined,
+        signal
       );
       playlistPath = result.playlistPath;
     }
+
+    if (signal.aborted) return;
+    const stillExists = await getDownload(id);
+    if (!stillExists) return;
 
     await reporter.flushPending();
 
@@ -333,9 +404,13 @@ async function runYoutubeDownloadJob(
     await persist(current);
     patchItemInStore(current, null);
   } catch (error) {
+    if (isAbortError(error) || signal.aborted) return;
+    const stillExists = await getDownload(id);
+    if (!stillExists) return;
     const message = error instanceof Error ? error.message : t('store.downloadError');
     await failDownload(id, message);
   } finally {
+    clearAbort(id);
     await stopForegroundIfIdle();
   }
 }
@@ -346,22 +421,33 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   activeId: null,
 
   hydrate: async () => {
+    const gen = mutationGeneration;
     const items = await listDownloads();
-    set({ items, hydrated: true });
-    const pending = items.filter(
-      (i) => i.status === 'queued' || i.status === 'downloading' || i.status === 'resolving'
-    );
-    for (const p of pending) {
-      const updated: DownloadRecord = {
-        ...p,
-        status: 'failed',
-        error: t('store.interrupted'),
-        updatedAt: Date.now(),
-      };
-      await persist(updated);
+    // Mark interrupted / dead paused rows failed before first UI publish.
+    const next: DownloadRecord[] = [];
+    for (const p of items) {
+      const active =
+        p.status === 'queued' ||
+        p.status === 'downloading' ||
+        p.status === 'resolving' ||
+        (p.status as string) === 'paused';
+      if (active) {
+        const updated: DownloadRecord = {
+          ...p,
+          status: 'failed',
+          error: t('store.interrupted'),
+          updatedAt: Date.now(),
+        };
+        await persist(updated);
+        next.push(updated);
+      } else {
+        next.push(p);
+      }
     }
-    if (pending.length) {
-      set({ items: await listDownloads() });
+    if (gen !== mutationGeneration) {
+      set({ items: await listDownloads(), hydrated: true });
+    } else {
+      set({ items: next, hydrated: true });
     }
     await stopDownloadForeground();
   },
@@ -371,6 +457,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   },
 
   enqueue: async (request) => {
+    bumpMutation();
     const id = makeId(
       request.movieId,
       request.quality,
@@ -402,11 +489,12 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     await persist(record);
     patchItemInStore(record, id);
 
-    void runDownloadJob(id, request);
+    enqueueMovieJob(() => runDownloadJob(id, request));
     return id;
   },
 
   enqueueYoutube: async (youtubeUrl, preferredQuality) => {
+    bumpMutation();
     const resolved = await resolveYoutubeStream(youtubeUrl, preferredQuality);
     const id = makeYoutubeId(resolved.videoId);
     const now = Date.now();
@@ -424,9 +512,9 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       movieId: `yt_${resolved.videoId}`,
       title: resolved.title,
       posterUrl: resolved.posterUrl,
-      audioLabel: 'YouTube',
+      audioLabel: t('downloads.youtubeAudio'),
       quality: resolved.quality,
-      subtitleLabel: '—',
+      subtitleLabel: t('downloads.noSubtitlesDash'),
       status: 'queued',
       progress: 0,
       createdAt: now,
@@ -443,6 +531,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   },
 
   retry: async (id) => {
+    bumpMutation();
     const item = await getDownload(id);
     if (!item) {
       throw new Error(t('store.notFound'));
@@ -505,6 +594,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   },
 
   completeMovieRetry: async (id, payload) => {
+    bumpMutation();
     const item = await getDownload(id);
     if (!item || !item.playerUrl) {
       throw new Error(t('store.notFound'));
@@ -574,10 +664,11 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     };
     await persist(updated);
     patchItemInStore(updated, id);
-    void runDownloadJob(id, request, baseDir);
+    enqueueMovieJob(() => runDownloadJob(id, request, baseDir));
   },
 
   failMovieResolve: async (id, message) => {
+    bumpMutation();
     const item = await getDownload(id);
     if (!item) return;
     const updated: DownloadRecord = {
@@ -591,6 +682,9 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   },
 
   remove: async (id) => {
+    bumpMutation();
+    abortControllers.get(id)?.abort();
+    clearAbort(id);
     const item = await getDownload(id);
     await deleteDownloadFiles(id, item?.videoDir);
     await deleteDownloadRow(id);

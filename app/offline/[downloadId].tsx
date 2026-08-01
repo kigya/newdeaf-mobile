@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -30,6 +30,7 @@ export default function OfflinePlayerScreen() {
   const [playMode, setPlayMode] = useState<PlayMode>('checking');
   const [resumeTarget, setResumeTarget] = useState<WatchProgressRecord | null>(null);
   const [initialPositionSec, setInitialPositionSec] = useState(0);
+  const saveGenRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +95,7 @@ export default function OfflinePlayerScreen() {
         item.season,
         item.episode
       );
+      const gen = ++saveGenRef.current;
       void upsertProgress({
         movieId: catalogId,
         season: item.season,
@@ -105,6 +107,7 @@ export default function OfflinePlayerScreen() {
         isSeries: item.season != null && item.episode != null,
         source: 'offline',
         downloadId: item.id,
+        saveGeneration: gen,
       });
     },
     [item, upsertProgress]

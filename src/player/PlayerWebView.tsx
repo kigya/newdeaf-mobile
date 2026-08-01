@@ -5,6 +5,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { StreamPayload } from '@/src/api/types';
 import {
   handleMediaFetchMessage,
+  getMediaFetchInjectorOwner,
   registerMediaFetchInjector,
   useMediaFetchStore,
 } from '@/src/downloads/mediaFetch';
@@ -83,11 +84,14 @@ export function PlayerWebView({
       const payload = JSON.stringify({ type: 'nd_fetch', id, url, mode: modeName });
       const js = `(function(){try{var f=document.getElementById('nd-player');if(f&&f.contentWindow){f.contentWindow.postMessage(${JSON.stringify(payload)},'*');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:'no iframe'}));}}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'nd_fetch_result',id:${JSON.stringify(id)},error:String(e&&e.message||e)}));}})();true;`;
       webRef.current?.injectJavaScript(js);
-    });
+    }, 'resolve');
 
     return () => {
-      registerMediaFetchInjector(null);
-      setReady(false);
+      // Only clear if this resolve WebView still owns the injector — host may take over.
+      registerMediaFetchInjector(null, 'resolve');
+      if (getMediaFetchInjectorOwner() === null) {
+        setReady(false);
+      }
       // Don't clear playerUrl here — withMediaFetchPlayer owns teardown.
     };
   }, [mediaFetch, mode, playerUrl, setPlayerUrl, setReady]);
@@ -137,7 +141,7 @@ export function PlayerWebView({
           return;
         }
         if (msg.type === 'error') {
-          onError?.(msg.message ?? 'Player error');
+          onError?.(msg.message ?? t('player.error'));
           return;
         }
         if (

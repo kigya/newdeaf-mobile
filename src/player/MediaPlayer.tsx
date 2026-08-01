@@ -114,10 +114,14 @@ export function MediaPlayer({
     uriRef.current = uri;
     preservePositionRef.current = resumeAt;
     const next = buildSource(uri, contentType, headers);
+    let seekInterval: ReturnType<typeof setInterval> | null = null;
+    let seekTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
     void (async () => {
       try {
         setPlayerError(null);
         await player.replaceAsync(next);
+        if (cancelled) return;
         wantPlayingRef.current = true;
         player.play();
         const target = preservePositionRef.current ?? 0;
@@ -136,17 +140,26 @@ export function MediaPlayer({
             return false;
           };
           if (!trySeek()) {
-            const id = setInterval(() => {
-              if (trySeek()) clearInterval(id);
+            seekInterval = setInterval(() => {
+              if (trySeek() && seekInterval) clearInterval(seekInterval);
             }, 200);
-            setTimeout(() => clearInterval(id), 5000);
+            seekTimeout = setTimeout(() => {
+              if (seekInterval) clearInterval(seekInterval);
+            }, 5000);
           }
         }
       } catch (e) {
         preservePositionRef.current = null;
-        setPlayerError(e instanceof Error ? e.message : t('offline.playbackError'));
+        if (!cancelled) {
+          setPlayerError(e instanceof Error ? e.message : t('offline.playbackError'));
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+      if (seekInterval) clearInterval(seekInterval);
+      if (seekTimeout) clearTimeout(seekTimeout);
+    };
   }, [uri, contentType, headers, player]);
 
   const reportProgress = (positionSec: number, force = false) => {
@@ -197,26 +210,9 @@ export function MediaPlayer({
       wantPlayingRef.current = true;
       return;
     }
-    // Stall recovery: local HLS sometimes stops after the first ~1s segment.
-    // Do not fight intentional pauses later in the video.
-    try {
-      const time = typeof player.currentTime === 'number' ? player.currentTime : 0;
-      if (wantPlayingRef.current && time > 0 && time < 3) {
-        setTimeout(() => {
-          try {
-            if (wantPlayingRef.current && !player.playing && (player.currentTime ?? 0) < 3) {
-              player.play();
-            }
-          } catch {
-            // ignore
-          }
-        }, 350);
-      } else if (time >= 3) {
-        wantPlayingRef.current = false;
-      }
-    } catch {
-      // ignore
-    }
+    // Native controls pause must win — do not auto-resume on playing=false.
+    // readyToPlay + wantPlayingRef still restarts after source swaps / errors.
+    wantPlayingRef.current = false;
   });
 
   useEffect(() => {
