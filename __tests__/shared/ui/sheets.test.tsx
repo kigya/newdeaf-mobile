@@ -150,8 +150,10 @@ const mockProbeYoutubeQualities = jest.fn(async () => ({
 }));
 
 jest.mock('@/src/features/downloads/youtube', () => ({
-  extractYoutubeVideoId: (...args: unknown[]) => mockExtractYoutubeVideoId(...(args as [string])),
-  probeYoutubeQualities: (...args: unknown[]) => mockProbeYoutubeQualities(...args),
+  extractYoutubeVideoId: (...args: unknown[]) =>
+    (mockExtractYoutubeVideoId as any)(...args),
+  probeYoutubeQualities: (...args: unknown[]) =>
+    (mockProbeYoutubeQualities as any)(...args),
 }));
 
 describe('DownloadSheet', () => {
@@ -460,8 +462,8 @@ describe('DownloadSheet', () => {
     let resolveEnqueue: () => void = () => undefined;
     mockEnqueue.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          resolveEnqueue = resolve;
+        new Promise<undefined>((resolve) => {
+          resolveEnqueue = () => resolve(undefined);
         })
     );
     await render(
@@ -598,10 +600,10 @@ describe('YoutubeDownloadSheet', () => {
     const originalOS = Platform.OS;
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
     const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
-    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
+    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
       handlers[event] = cb;
       return { remove: jest.fn() };
-    });
+    }) as any);
     await render(<YoutubeDownloadSheet visible onClose={onClose} />);
     handlers.keyboardWillShow?.({ endCoordinates: { height: 100 } });
     handlers.keyboardWillHide?.();
@@ -617,10 +619,10 @@ describe('YoutubeDownloadSheet', () => {
 
   it('clears error on text change and handles keyboard + backdrop', async () => {
     const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
-    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
+    const addSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e?: { endCoordinates: { height: number } }) => void) => {
       handlers[event] = cb;
       return { remove: jest.fn() };
-    });
+    }) as any);
     const dismissSpy = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
 
     await render(<YoutubeDownloadSheet visible onClose={onClose} />);
@@ -658,10 +660,10 @@ describe('YoutubeDownloadSheet', () => {
     const originalOS = Platform.OS;
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {};
-    jest.spyOn(Keyboard, 'addListener').mockImplementation((event: string, cb) => {
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: unknown) => {
       handlers[event] = cb as (e?: { endCoordinates: { height: number } }) => void;
       return { remove: jest.fn() };
-    });
+    }) as any);
 
     let resolveProbe: (v: {
       title: string;
@@ -697,8 +699,8 @@ describe('YoutubeDownloadSheet', () => {
     let resolveStart: () => void = () => undefined;
     mockEnqueueYoutube.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          resolveStart = resolve;
+        new Promise<undefined>((resolve) => {
+          resolveStart = () => resolve(undefined);
         })
     );
     await fireEvent.press(screen.getByText(t('youtube.cta')));

@@ -151,7 +151,7 @@ describe('catalog api', () => {
 
   it('fetchPlayerFileList returns parsed list or null', async () => {
     jest.useFakeTimers();
-    const fetchMock = jest.spyOn(global, 'fetch' as never) as jest.Mock;
+    const fetchMock = jest.spyOn(global, 'fetch' as never) as unknown as jest.Mock;
     fetchMock.mockResolvedValueOnce({
       ok: true,
       text: async () => '<player/>',

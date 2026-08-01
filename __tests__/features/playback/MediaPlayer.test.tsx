@@ -265,8 +265,8 @@ describe('MediaPlayer', () => {
     let resolveReplace: () => void = () => undefined;
     mockReplaceAsync.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          resolveReplace = resolve;
+        new Promise<undefined>((resolve) => {
+          resolveReplace = () => resolve(undefined);
         })
     );
     const { rerender, unmount } = await render(

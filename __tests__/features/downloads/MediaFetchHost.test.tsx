@@ -32,9 +32,10 @@ const mockMediaFetchStoreState = {
 };
 
 jest.mock('@/src/features/downloads/mediaFetch', () => ({
-  handleMediaFetchMessage: (...args: unknown[]) => mockHandleMediaFetchMessage(...args),
+  handleMediaFetchMessage: (...args: unknown[]) =>
+    (mockHandleMediaFetchMessage as any)(...args),
   registerMediaFetchInjector: (...args: unknown[]) =>
-    mockRegisterMediaFetchInjector(...args),
+    (mockRegisterMediaFetchInjector as any)(...args),
   getMediaFetchInjectorOwner: () => null,
   useMediaFetchStore: jest.fn((selector: (s: typeof mockMediaFetchStoreState) => unknown) =>
     selector(mockMediaFetchStoreState)

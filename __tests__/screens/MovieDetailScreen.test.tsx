@@ -46,7 +46,7 @@ let mockDownloadItems: unknown[] = [];
 let mockBreakpoint = { isTablet: false, width: 390, columns: 2 };
 
 jest.mock('expo-web-browser', () => ({
-  openBrowserAsync: (...args: unknown[]) => mockOpenBrowserAsync(...args),
+  openBrowserAsync: (...args: unknown[]) => (mockOpenBrowserAsync as any)(...args),
 }));
 
 jest.mock('expo-linear-gradient', () => {
@@ -77,11 +77,12 @@ jest.mock('@/src/data/catalog/catalog', () => ({
 }));
 
 jest.mock('@/src/data/catalog/parse', () => ({
-  buildPlayerUrl: (...args: unknown[]) => mockBuildPlayerUrl(...(args as [string, object])),
+  buildPlayerUrl: (...args: unknown[]) =>
+    mockBuildPlayerUrl(...(args as [string, Record<string, unknown>])),
   listSeasons: (...args: unknown[]) => mockListSeasons(...(args as [PlayerFileList])),
   listEpisodes: (...args: unknown[]) =>
     mockListEpisodes(...(args as [PlayerFileList, number])),
-  pickEpisodeEntry: (...args: unknown[]) => mockPickEpisodeEntry(...args),
+  pickEpisodeEntry: (...args: unknown[]) => (mockPickEpisodeEntry as any)(...args),
 }));
 
 jest.mock('@/src/data/catalog/tmdb', () => ({
@@ -108,7 +109,8 @@ jest.mock('@/src/features/downloads/store', () => ({
 }));
 
 jest.mock('@/src/features/downloads/match', () => ({
-  listCompletedDownloads: (...args: unknown[]) => mockListCompletedDownloads(...args),
+  listCompletedDownloads: (...args: unknown[]) =>
+    (mockListCompletedDownloads as any)(...args),
 }));
 
 jest.mock('@/src/features/watch-progress/store', () => ({
@@ -287,7 +289,7 @@ function mockParams(params: Record<string, string> = { id: '42', href: '/42-test
     replace: jest.fn(),
     canGoBack: jest.fn(() => true),
   });
-  (Stack.Screen as jest.Mock).mockImplementation(
+  (Stack.Screen as unknown as jest.Mock).mockImplementation(
     ({ options }: { options?: { headerRight?: () => React.ReactNode; title?: string } }) => {
       const ReactLocal = require('react');
       const { View, Text } = require('react-native');
@@ -422,7 +424,7 @@ describe('MovieDetailScreen', () => {
     await waitFor(() => expect(screen.getAllByText('Test Movie').length).toBeGreaterThan(0));
     await fireEvent.press(screen.getByLabelText(t('movie.addFavorite')));
     await waitFor(() => expect(mockToggleFavorite).toHaveBeenCalled());
-    expect(mockToggleFavorite.mock.calls[0][0].id).toBe('42');
+    expect((mockToggleFavorite.mock.calls[0] as any)[0].id).toBe('42');
   });
 
   it('shows remove favorite label when already favorited', async () => {
@@ -860,10 +862,10 @@ describe('MovieDetailScreen', () => {
   it('blocks double favorite toggle while busy and handles press style', async () => {
     let release!: () => void;
     mockToggleFavorite.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        })
+      (() =>
+        new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined);
+        })) as any
     );
     mockFetchMovieDetail.mockResolvedValue(baseMovie());
     await render(<MovieDetailScreen />);
@@ -892,7 +894,7 @@ describe('MovieDetailScreen', () => {
     await render(<MovieDetailScreen />);
     await fireEvent.press(screen.getByLabelText(t('movie.addFavorite')));
     await waitFor(() => expect(mockToggleFavorite).toHaveBeenCalled());
-    expect(mockToggleFavorite.mock.calls[0][0]).toMatchObject({
+    expect((mockToggleFavorite.mock.calls[0] as any)[0]).toMatchObject({
       id: '77',
       slug: '77',
       title: 'From Params',
@@ -907,8 +909,8 @@ describe('MovieDetailScreen', () => {
     await render(<MovieDetailScreen />);
     await fireEvent.press(screen.getByLabelText(t('movie.addFavorite')));
     await waitFor(() => expect(mockToggleFavorite).toHaveBeenCalled());
-    expect(mockToggleFavorite.mock.calls[0][0].title).toBe(t('common.movie'));
-    expect(mockToggleFavorite.mock.calls[0][0].href).toBe('/88.html');
+    expect((mockToggleFavorite.mock.calls[0] as any)[0].title).toBe(t('common.movie'));
+    expect((mockToggleFavorite.mock.calls[0] as any)[0].href).toBe('/88.html');
   });
 
   it('cancels after TMDB starts so post-enrich cancelled return runs', async () => {
@@ -939,7 +941,7 @@ describe('MovieDetailScreen', () => {
   });
 
   it('pickEpisodeEntry null falls back to movie translationId', async () => {
-    mockPickEpisodeEntry.mockReturnValue(null);
+    mockPickEpisodeEntry.mockReturnValue(null as any);
     mockFetchMovieDetail.mockResolvedValue(
       baseMovie({ isSeries: true, translationId: '55' })
     );
@@ -1065,7 +1067,7 @@ describe('MovieDetailScreen', () => {
     await waitFor(() => expect(screen.getByLabelText(t('movie.addFavorite'))).toBeTruthy());
     await fireEvent.press(screen.getByLabelText(t('movie.addFavorite')));
     await waitFor(() => expect(mockToggleFavorite).toHaveBeenCalled());
-    expect(mockToggleFavorite.mock.calls[0][0]).toMatchObject({
+    expect((mockToggleFavorite.mock.calls[0] as any)[0]).toMatchObject({
       id: '99',
       posterUrl: 'https://cdn.example/param.jpg',
     });

@@ -22,7 +22,7 @@ jest.mock('react-native-webview', () => {
 
 const mockHandleMediaFetchMessage = jest.fn(() => false);
 const mockRegisterMediaFetchInjector = jest.fn();
-const mockGetMediaFetchInjectorOwner = jest.fn(() => null);
+const mockGetMediaFetchInjectorOwner = jest.fn((): string | null => null);
 const mockSetReady = jest.fn();
 const mockSetPlayerUrl = jest.fn();
 const mockMediaFetchStoreState = {
@@ -34,9 +34,10 @@ const mockMediaFetchStoreState = {
 };
 
 jest.mock('@/src/features/downloads/mediaFetch', () => ({
-  handleMediaFetchMessage: (...args: unknown[]) => mockHandleMediaFetchMessage(...args),
+  handleMediaFetchMessage: (...args: unknown[]) =>
+    (mockHandleMediaFetchMessage as any)(...args),
   registerMediaFetchInjector: (...args: unknown[]) =>
-    mockRegisterMediaFetchInjector(...args),
+    (mockRegisterMediaFetchInjector as any)(...args),
   getMediaFetchInjectorOwner: () => mockGetMediaFetchInjectorOwner(),
   useMediaFetchStore: jest.fn((selector: (s: typeof mockMediaFetchStoreState) => unknown) =>
     selector(mockMediaFetchStoreState)
@@ -46,7 +47,8 @@ jest.mock('@/src/features/downloads/mediaFetch', () => ({
 const mockPrepareLocalPlaybackUri = jest.fn(async (path: string) => `file://${path}`);
 
 jest.mock('@/src/features/playback/offline/prepareLocalSource', () => ({
-  prepareLocalPlaybackUri: (...args: unknown[]) => mockPrepareLocalPlaybackUri(...args),
+  prepareLocalPlaybackUri: (...args: unknown[]) =>
+    (mockPrepareLocalPlaybackUri as any)(...args),
   ensureFileUri: (p: string) => (p.startsWith('file:') ? p : `file://${p}`),
 }));
 

@@ -113,17 +113,18 @@ describe('usePaginatedMovies', () => {
       .mockResolvedValueOnce({ items: [movie('fresh')], hasMore: false });
 
     const { result, rerender } = await renderHook(
-      ({ fetcher }) => usePaginatedMovies(fetcher, { loadErrorFallback: 'err' }),
+      (({ fetcher }: { fetcher: any }) =>
+        usePaginatedMovies(fetcher, { loadErrorFallback: 'err' })) as any,
       { initialProps: { fetcher: fetchPage } }
     );
 
     const fetchPage2 = jest.fn(async () => ({ items: [movie('fresh')], hasMore: false }));
     rerender({ fetcher: fetchPage2 });
-    await waitFor(() => expect(result.current.movies[0]?.id).toBe('fresh'));
+    await waitFor(() => expect((result.current as any).movies[0]?.id).toBe('fresh'));
 
     resolveFirst({ items: [movie('stale')], hasMore: true });
     await act(async () => {});
-    expect(result.current.movies[0]?.id).toBe('fresh');
+    expect((result.current as any).movies[0]?.id).toBe('fresh');
   });
 
   it('ignores stale error from superseded request', async () => {
@@ -136,19 +137,19 @@ describe('usePaginatedMovies', () => {
     );
 
     const { result, rerender } = await renderHook(
-      ({ fetcher }) =>
+      (({ fetcher }: { fetcher: any }) =>
         usePaginatedMovies(fetcher, {
           loadErrorFallback: 'err',
           clearOnReplaceError: true,
-        }),
+        })) as any,
       { initialProps: { fetcher: fetchPage } }
     );
 
     const fetchPage2 = jest.fn(async () => ({ items: [movie('ok')], hasMore: false }));
     rerender({ fetcher: fetchPage2 });
-    await waitFor(() => expect(result.current.movies[0]?.id).toBe('ok'));
+    await waitFor(() => expect((result.current as any).movies[0]?.id).toBe('ok'));
     rejectFirst(new Error('stale'));
     await act(async () => {});
-    expect(result.current.error).toBeNull();
+    expect((result.current as any).error).toBeNull();
   });
 });
