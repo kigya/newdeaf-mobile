@@ -15,6 +15,35 @@ jest.mock('expo-file-system/legacy', () => ({
   deleteAsync: jest.fn(async () => undefined),
   makeDirectoryAsync: jest.fn(async () => undefined),
   createDownloadResumable: jest.fn(),
+  readDirectoryAsync: jest.fn(async () => []),
+  getFreeDiskStorageAsync: jest.fn(async () => 8 * 1024 * 1024 * 1024),
+  getTotalDiskCapacityAsync: jest.fn(async () => 64 * 1024 * 1024 * 1024),
+  copyAsync: jest.fn(async () => undefined),
+  moveAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('expo-network', () => ({
+  NetworkStateType: {
+    NONE: 'NONE',
+    UNKNOWN: 'UNKNOWN',
+    CELLULAR: 'CELLULAR',
+    WIFI: 'WIFI',
+    BLUETOOTH: 'BLUETOOTH',
+    ETHERNET: 'ETHERNET',
+    WIMAX: 'WIMAX',
+    VPN: 'VPN',
+    OTHER: 'OTHER',
+  },
+  useNetworkState: jest.fn(() => ({
+    type: 'WIFI',
+    isConnected: true,
+    isInternetReachable: true,
+  })),
+  getNetworkStateAsync: jest.fn(async () => ({
+    type: 'WIFI',
+    isConnected: true,
+    isInternetReachable: true,
+  })),
 }));
 
 jest.mock('expo-sqlite', () => ({
@@ -44,6 +73,7 @@ jest.mock('expo-router', () => ({
     canGoBack: jest.fn(() => true),
   })),
   useLocalSearchParams: jest.fn(() => ({})),
+  usePathname: jest.fn(() => '/movie/1'),
   Stack: {
     Screen: jest.fn(() => null),
   },

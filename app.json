@@ -2,7 +2,7 @@
   "expo": {
     "name": "NewDeaf",
     "slug": "newdeaf",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "newdeaf",
@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "top.newdeaf.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#090C10",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
