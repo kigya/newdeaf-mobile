@@ -398,6 +398,41 @@ describe('parseMovieDetail', () => {
     expect(detail.fallbackPlayerUrl).toContain('fsst.online');
   });
 
+  it('keeps embess as download fallback when a native balancer iframe is also present', () => {
+    const html = `
+      <meta property="og:title" content="Плохая обезьяна (2024)"/>
+      <iframe src="https://playep.pro/pl/1"></iframe>
+      <iframe src="https://api.embess.ws/embed/movie/76587"></iframe>
+      <iframe src="https://biorn-as.stloadi.live:9443/?token=abc&token_movie=tm&translation=79&season=1&episode=1"></iframe>
+    `;
+    const detail = parseMovieDetail(html, '/9786-plohaya-obezyana.html');
+    expect(detail.nativePlayer).toBe(true);
+    expect(detail.playerUrl).toContain('stloadi.live');
+    expect(detail.fallbackPlayerUrl).toContain('embess.ws');
+  });
+
+  it('keeps namy Venom mirror as download fallback when embess is absent', () => {
+    const html = `
+      <meta property="og:title" content="Вождь войны"/>
+      <iframe src="https://biorn-as.stloadi.live:9443/?token=abc&token_movie=tm&translation=79&season=1&episode=1"></iframe>
+      <iframe src="https://api.namy.ws/embed/movie/84306"></iframe>
+    `;
+    const detail = parseMovieDetail(html, '/10452-vozhd.html');
+    expect(detail.nativePlayer).toBe(true);
+    expect(detail.fallbackPlayerUrl).toContain('namy.ws');
+  });
+
+  it('prefers embess over namy when both Venom iframes exist', () => {
+    const html = `
+      <meta property="og:title" content="Warlord"/>
+      <iframe src="https://api.namy.ws/embed/movie/1"></iframe>
+      <iframe src="https://api.embess.ws/embed/movie/1"></iframe>
+      <iframe src="https://biorn-as.stloadi.live:9443/?token=abc&token_movie=tm"></iframe>
+    `;
+    const detail = parseMovieDetail(html, '/1-warlord.html');
+    expect(detail.fallbackPlayerUrl).toContain('embess.ws');
+  });
+
   it('falls back to last bilingual segment when no year in parts', () => {
     const html = `
       <meta property="og:title" content="Русское / English Only"/>

@@ -67,6 +67,23 @@ describe('MediaPlayer', () => {
     jest.useRealTimers();
   });
 
+  it('shows skip intro inside the window and seeks to the end', async () => {
+    const onMark = jest.fn();
+    await render(
+      <MediaPlayer
+        uri="file:///v.m3u8"
+        introSkip={{ startSec: 0, endSec: 90 }}
+        onMarkIntroSkip={onMark}
+      />
+    );
+    expect(screen.getByText(t('offline.markSkipPoint'))).toBeTruthy();
+    expect(screen.getByText(t('offline.skipIntro'))).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('offline.skipIntro')));
+    expect(mockPlayerState.currentTime).toBe(90);
+    await fireEvent.press(screen.getByText(t('offline.markSkipPoint')));
+    expect(onMark).toHaveBeenCalled();
+  });
+
   it('renders title and closes with progress', async () => {
     const onClose = jest.fn();
     const onProgress = jest.fn();

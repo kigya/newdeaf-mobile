@@ -20,6 +20,8 @@ type Props = {
   initialPositionSec?: number;
   onProgress?: (payload: OfflineProgressPayload) => void;
   onClose?: () => void;
+  introSkip?: { startSec: number; endSec: number };
+  onMarkIntroSkip?: (positionSec: number) => void;
 };
 
 /** Thin wrapper around MediaPlayer for local downloads. */
@@ -31,6 +33,8 @@ export function OfflinePlayer({
   initialPositionSec = 0,
   onProgress,
   onClose,
+  introSkip,
+  onMarkIntroSkip,
 }: Props) {
   const [readyUri, setReadyUri] = useState<string | null>(null);
   const [prepareError, setPrepareError] = useState<string | null>(null);
@@ -80,6 +84,8 @@ export function OfflinePlayer({
       onProgress={onProgress}
       onClose={onClose}
       enableBackgroundPlayback
+      introSkip={introSkip}
+      onMarkIntroSkip={onMarkIntroSkip}
     />
   );
 }

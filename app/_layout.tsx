@@ -14,12 +14,17 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { EmbedHtmlFetchHost } from '@/src/features/downloads/EmbedHtmlFetchHost';
 import { MediaFetchHost } from '@/src/features/downloads/MediaFetchHost';
+import { useDiscoveryStore } from '@/src/features/discovery/store';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import { useFavoritesStore } from '@/src/features/favorites/store';
+import { useListsStore } from '@/src/features/lists/store';
 import { t } from '@/src/shared/i18n';
 import { useSettingsStore } from '@/src/features/settings/store';
+import { useTitlePrefsStore } from '@/src/features/title-prefs/store';
 import { colors } from '@/src/shared/theme';
+import { useWatchHistoryStore } from '@/src/features/watch-history/store';
 import { useWatchProgressStore } from '@/src/features/watch-progress/store';
 
 export { ErrorBoundary } from 'expo-router';
@@ -34,6 +39,10 @@ export default function RootLayout() {
   const hydrateDownloads = useDownloadsStore((s) => s.hydrate);
   const hydrateFavorites = useFavoritesStore((s) => s.hydrate);
   const hydrateWatchProgress = useWatchProgressStore((s) => s.hydrate);
+  const hydrateWatchHistory = useWatchHistoryStore((s) => s.hydrate);
+  const hydrateLists = useListsStore((s) => s.hydrate);
+  const hydrateTitlePrefs = useTitlePrefsStore((s) => s.hydrate);
+  const hydrateDiscovery = useDiscoveryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const syncFromSystemIfChanged = useSettingsStore((s) => s.syncFromSystemIfChanged);
   const locale = useSettingsStore((s) => s.locale);
@@ -56,6 +65,10 @@ export default function RootLayout() {
         void hydrateDownloads();
         void hydrateFavorites();
         void hydrateWatchProgress();
+        void hydrateWatchHistory();
+        void hydrateLists();
+        void hydrateTitlePrefs();
+        void hydrateDiscovery();
         SplashScreen.hideAsync();
         if (Platform.OS === 'android') {
           void Notifications.requestPermissionsAsync();
@@ -68,6 +81,10 @@ export default function RootLayout() {
     hydrateDownloads,
     hydrateFavorites,
     hydrateWatchProgress,
+    hydrateWatchHistory,
+    hydrateLists,
+    hydrateTitlePrefs,
+    hydrateDiscovery,
   ]);
 
   useEffect(() => {
@@ -122,6 +139,15 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="trailer/[videoId]"
+          options={{
+            title: t('trailer.title'),
+            headerShown: false,
+            presentation: 'fullScreenModal',
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
           name="genre/[slug]"
           options={{
             title: t('common.genre'),
@@ -130,6 +156,7 @@ export default function RootLayout() {
         />
       </Stack>
       <MediaFetchHost />
+      <EmbedHtmlFetchHost />
     </GestureHandlerRootView>
   );
 }

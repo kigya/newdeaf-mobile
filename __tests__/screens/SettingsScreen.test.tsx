@@ -8,17 +8,29 @@ import { t } from '@/src/shared/i18n';
 
 const mockSetLocale = jest.fn(async () => undefined);
 const mockSetPreferredDownloadQuality = jest.fn(async () => undefined);
+const mockSetDownloadsWifiOnly = jest.fn(async () => undefined);
+const mockSetStorageCapMb = jest.fn(async () => undefined);
 let mockLocale: 'en' | 'ru' = 'en';
+let mockDownloadsWifiOnly = false;
+let mockStorageCapMb = 0;
 
 jest.mock('@/src/features/settings/store', () => ({
   useSettingsStore: jest.fn((selector: (s: Record<string, unknown>) => unknown) =>
-    selector({
-      get locale() {
-        return mockLocale;
-      },
-      preferredDownloadQuality: '720',
+      selector({
+        get locale() {
+          return mockLocale;
+        },
+        preferredDownloadQuality: '720',
+        get downloadsWifiOnly() {
+          return mockDownloadsWifiOnly;
+        },
+        get storageCapMb() {
+          return mockStorageCapMb;
+        },
       setLocale: mockSetLocale,
       setPreferredDownloadQuality: mockSetPreferredDownloadQuality,
+      setDownloadsWifiOnly: mockSetDownloadsWifiOnly,
+      setStorageCapMb: mockSetStorageCapMb,
     })
   ),
 }));
@@ -27,6 +39,8 @@ describe('SettingsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLocale = 'en';
+    mockDownloadsWifiOnly = false;
+    mockStorageCapMb = 0;
     (Constants as { expoConfig?: { version?: string } | null }).expoConfig = { version: '1.0.0' };
     (Constants as { nativeApplicationVersion?: string | null }).nativeApplicationVersion = '1.0.0';
   });
@@ -37,6 +51,8 @@ describe('SettingsScreen', () => {
   });
 
   it('renders and changes language / quality', async () => {
+    mockDownloadsWifiOnly = true;
+    mockStorageCapMb = 1024;
     await render(<SettingsScreen />);
     expect(screen.getByText(t('settings.title'))).toBeTruthy();
 
@@ -60,6 +76,14 @@ describe('SettingsScreen', () => {
 
     await fireEvent.press(screen.getByText(t('settings.quality720')));
     expect(mockSetPreferredDownloadQuality).toHaveBeenCalledWith('720');
+
+    const wifiLabels = screen.getAllByText(t('settings.wifiOnly'));
+    await fireEvent.press(wifiLabels[wifiLabels.length - 1]);
+    expect(mockSetDownloadsWifiOnly).toHaveBeenCalledWith(false);
+    await fireEvent.press(screen.getByText(t('settings.storageCapValue', { n: 1 })));
+    expect(mockSetStorageCapMb).toHaveBeenCalledWith(1024);
+    await fireEvent.press(screen.getByText(t('settings.storageUnlimited')));
+    expect(mockSetStorageCapMb).toHaveBeenCalledWith(0);
   });
 
   it('falls back version from nativeApplicationVersion then default', async () => {

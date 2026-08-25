@@ -145,6 +145,15 @@ describe('MovieGrid', () => {
     expect(screen.getByText('None')).toBeTruthy();
   });
 
+  it('shows compact empty and compact loader', async () => {
+    const { rerender } = await render(
+      <MovieGrid movies={[]} loading={false} emptyCompact emptyTitle="Compact empty" />
+    );
+    expect(screen.getByText('Compact empty')).toBeTruthy();
+    await rerender(<MovieGrid movies={[]} loading emptyCompact emptyTitle="Compact empty" />);
+    expect(screen.toJSON()).toBeTruthy();
+  });
+
   it('renders movies and navigates on press', async () => {
     const mockPush = mockRouterPush();
     const onScrollBeginDrag = jest.fn();
@@ -229,6 +238,32 @@ describe('MovieGrid', () => {
       />
     );
     expect(screen.getByText('No items')).toBeTruthy();
+  });
+
+  it('uses compact empty inside a headed list', async () => {
+    await render(
+      <MovieGrid
+        movies={[]}
+        loading={false}
+        emptyCompact
+        ListHeaderComponent={<React.Fragment />}
+        emptyTitle="Headed compact"
+      />
+    );
+    expect(screen.getByText('Headed compact')).toBeTruthy();
+  });
+
+  it('uses compact loader inside a headed list', async () => {
+    await render(
+      <MovieGrid
+        movies={[]}
+        loading
+        emptyCompact
+        ListHeaderComponent={<React.Fragment />}
+        emptyTitle="Headed compact"
+      />
+    );
+    expect(screen.toJSON()).toBeTruthy();
   });
 });
 

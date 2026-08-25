@@ -65,6 +65,12 @@ describe('EmptyState', () => {
     await render(<EmptyState title="Empty" />);
     expect(screen.getByText('Empty')).toBeTruthy();
   });
+
+  it('renders compact without stretching leftover height', async () => {
+    await render(<EmptyState title="Compact empty" subtitle="Sit under chrome" compact />);
+    expect(screen.getByText('Compact empty')).toBeTruthy();
+    expect(screen.getByText('Sit under chrome')).toBeTruthy();
+  });
 });
 
 describe('ConfirmDialog', () => {

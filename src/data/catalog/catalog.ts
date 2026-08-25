@@ -6,6 +6,7 @@ import {
   parsePlayerFileList,
   parseSearchResults,
 } from './parse';
+import { parsePopularCarousel } from './parsePopular';
 import {
   BASE_URL,
   GENRES,
@@ -142,9 +143,19 @@ export function getGenres(): Genre[] {
   return GENRES;
 }
 
+export async function fetchSitePopular(): Promise<MovieSummary[]> {
+  const html = await fetchHtml('/');
+  return parsePopularCarousel(html);
+}
+
 export { BASE_URL, parseMovieList };
 export {
   isEmbessPlayerUrl,
+  isFsstPlayerUrl,
+  isFsstPlaylistUrl,
+  isProgressiveMediaUrl,
   isResolvableEmbedUrl,
+  isVenomEmbedUrl,
+  pickVenomEmbedUrl,
   resolveEmbedStream,
 } from './embedStreams';

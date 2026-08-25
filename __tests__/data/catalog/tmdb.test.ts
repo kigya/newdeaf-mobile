@@ -16,7 +16,7 @@ function loadTmdb(opts?: { key?: string | null; token?: string | null; locale?: 
   }));
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('@/src/data/catalog/tmdb') as typeof import('@/src/data/catalog/tmdb');
+  return require('@/src/data/catalog/tmdb/enrich') as typeof import('@/src/data/catalog/tmdb/enrich');
 }
 
 describe('tmdb', () => {

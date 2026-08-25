@@ -1,7 +1,7 @@
 # PRD: Catalog, search, and genres
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Related code:** `app/(tabs)/index.tsx` → `src/screens/catalog/`, `search.tsx`, `genres.tsx`, `app/genre/[slug].tsx`, `src/data/catalog/`, `MovieGrid`, `MovieCard`, `ContinueWatchingRail`, `GenresBanner`
 - **Screens:** [`../screens/catalog.md`](../screens/catalog.md), [`search.md`](../screens/search.md), [`genres.md`](../screens/genres.md), [`genre-list.md`](../screens/genre-list.md)
 
@@ -12,6 +12,8 @@ Users need to discover titles from newdeaf.top inside the app without opening a 
 ## Goals
 
 - Browse new releases with pull-to-refresh and infinite pagination
+- Curated discovery rails (site popular, KP/TMDB resolved into catalog, genre rails)
+- “I’m feeling lucky” random catalog title
 - Continue Watching rail with online/offline routing
 - Search by query (min 4 chars; TMDB RU bridge for Latin/EN)
 - Browse by genre (hidden tab + genre list)
@@ -19,9 +21,9 @@ Users need to discover titles from newdeaf.top inside the app without opening a 
 
 ## Non-goals
 
-- Personalized recommendations
+- Personalized recommendations beyond “because you watched” (KP similars of last history title)
 - Server-side user history sync
-- Offline catalog cache (roadmap)
+- Offline catalog cache (rail cache 24h is in [`discovery-rails.md`](discovery-rails.md))
 - Replacing the site’s catalog taxonomy
 
 ## User stories

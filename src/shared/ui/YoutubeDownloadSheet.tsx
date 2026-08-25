@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { isDownloadGateError } from '@/src/features/downloads/errors';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import {
   extractYoutubeVideoId,
@@ -25,6 +26,7 @@ import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { pickPreferredQuality } from '@/src/features/settings/pickPreferredQuality';
 import { useSettingsStore } from '@/src/features/settings/store';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { sheetStyles } from '@/src/shared/ui/sheetStyles';
 
 type Props = {
@@ -49,6 +51,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   const [probing, setProbing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gate, setGate] = useState<'wifi' | 'storage' | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardOpen = useRef(false);
 
@@ -81,6 +84,7 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
   const resetAndClose = () => {
     setUrl('');
     setError(null);
+    setGate(null);
     setStarting(false);
     setProbing(false);
     setStep('url');
@@ -119,14 +123,22 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
     }
   };
 
-  const onStart = async () => {
+  const onStart = async (force?: boolean) => {
     setError(null);
     setStarting(true);
     try {
-      await enqueueYoutube(url.trim(), quality);
+      if (force) {
+        await enqueueYoutube(url.trim(), quality, { force: true });
+      } else {
+        await enqueueYoutube(url.trim(), quality);
+      }
       resetAndClose();
     } catch (e) {
-      setError(errorMessage(e, t('youtube.startFailed')));
+      if (isDownloadGateError(e)) {
+        setGate(e.code);
+      } else {
+        setError(errorMessage(e, t('youtube.startFailed')));
+      }
     } finally {
       setStarting(false);
     }
@@ -260,6 +272,18 @@ export function YoutubeDownloadSheet({ visible, onClose }: Props) {
           )}
         </View>
       </KeyboardAvoidingView>
+      <ConfirmDialog
+        visible={gate != null}
+        title={gate === 'wifi' ? t('downloadSheet.wifiTitle') : t('downloadSheet.storageTitle')}
+        message={gate === 'wifi' ? t('downloads.wifiBlocked') : t('downloads.storageBlocked')}
+        confirmLabel={t('downloads.downloadAnyway')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={() => {
+          setGate(null);
+          void onStart(true);
+        }}
+        onCancel={() => setGate(null)}
+      />
     </View>
   );
 }

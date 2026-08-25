@@ -47,6 +47,9 @@ export type HlsSource = {
   label: string;
   quality: StreamQualityMap;
   audioId?: string;
+  /** Fsst playlist_iframe episode coordinates when label is an episode comment. */
+  season?: number;
+  episode?: number;
 };
 
 export type CaptionTrack = {
@@ -64,6 +67,8 @@ export type StreamPayload = {
   type?: string;
   autoplay?: boolean;
   time?: number;
+  /** True when qualities are progressive MP4 (fsst), not HLS masters. */
+  progressive?: boolean;
 };
 
 export type PlayerFileListEntry = {

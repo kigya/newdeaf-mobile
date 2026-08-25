@@ -104,22 +104,27 @@ jest.mock('@/src/shared/ui/MovieGrid', () => ({
       ReactLocal.createElement(Text, null, emptyTitle ?? 'grid'),
       emptySubtitle ? ReactLocal.createElement(Text, null, emptySubtitle) : null,
       downloaded ? ReactLocal.createElement(Text, null, 'dl-flag') : null,
-      movies?.[0]
-        ? ReactLocal.createElement(
-            Pressable,
-            {
-              testID: 'grid-long',
-              onLongPress: () => onLongPressMovie?.(movies[0]),
-            },
-            ReactLocal.createElement(Text, null, movies[0].title)
-          )
-        : null
+      movies?.map((m, i) =>
+        ReactLocal.createElement(
+          Pressable,
+          {
+            key: m.id ?? String(i),
+            testID: i === 0 ? 'grid-long' : `grid-long-${m.id}`,
+            onLongPress: () => onLongPressMovie?.(m),
+          },
+          ReactLocal.createElement(Text, null, m.title)
+        )
+      )
     );
   },
 }));
 
 const mockClearById = jest.fn(async () => undefined);
 const mockRemoveFavorite = jest.fn(async () => undefined);
+const mockRemoveListItem = jest.fn(async () => undefined);
+const mockDeleteList = jest.fn(async () => undefined);
+const mockRemoveHistory = jest.fn(async () => undefined);
+const mockPickRandom = jest.fn(async () => undefined) as jest.Mock;
 
 jest.mock('@/src/features/watch-progress/store', () => ({
   useWatchProgressStore: jest.fn((selector: (s: Record<string, unknown>) => unknown) =>
@@ -142,8 +147,97 @@ jest.mock('@/src/features/favorites/store', () => ({
 
 jest.mock('@/src/features/downloads/store', () => ({
   useDownloadsStore: jest.fn((selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ items: [] })
+      selector({ items: [{ id: 'd1', status: 'completed' }] })
   ),
+}));
+
+jest.mock('@/src/features/discovery/store', () => ({
+  useDiscoveryStore: jest.fn((sel) =>
+    sel({
+      hydrated: true,
+      refreshing: false,
+      refreshStale: jest.fn(async () => undefined),
+      rails: {},
+      visibleItems: () => [],
+      pickRandom: mockPickRandom,
+    })
+  ),
+}));
+
+jest.mock('@/src/features/lists/store', () => ({
+  useListsStore: jest.fn((sel: (s: Record<string, unknown>) => unknown) =>
+    sel({
+      hydrated: true,
+      lists: [{ id: 'custom1', name: 'My Shelf', kind: 'custom' }],
+      items: [
+        {
+          listId: 'queue',
+          id: 'q1',
+          title: 'Queued',
+          href: '/q1.html',
+          slug: 'q1',
+        },
+        {
+          listId: 'rewatch',
+          id: 'r1',
+          title: 'Rewatch Me',
+          href: '/r1.html',
+          slug: 'r1',
+        },
+        {
+          listId: 'custom1',
+          id: 'c1',
+          title: 'Custom Film',
+          href: '/c1.html',
+          slug: 'c1',
+        },
+      ],
+      removeItem: mockRemoveListItem,
+      deleteList: mockDeleteList,
+    })
+  ),
+}));
+
+jest.mock('@/src/features/watch-history/store', () => ({
+  useWatchHistoryStore: jest.fn((sel: (s: Record<string, unknown>) => unknown) =>
+    sel({
+      hydrated: true,
+      remove: mockRemoveHistory,
+      items: [
+        {
+          id: 'h1',
+          movieId: 'h1',
+          title: 'Watched Once',
+          posterUrl: 'https://p',
+          isSeries: false,
+          watchedAt: 30,
+        },
+        {
+          id: 's1_s1e2',
+          movieId: 's1',
+          title: 'Serial Show',
+          isSeries: true,
+          season: 1,
+          episode: 2,
+          watchedAt: 20,
+        },
+        {
+          id: 's1_s1e1',
+          movieId: 's1',
+          title: 'Serial Show',
+          isSeries: true,
+          season: 1,
+          episode: 1,
+          watchedAt: 10,
+        },
+      ],
+    })
+  ),
+}));
+
+jest.mock('@/src/features/downloads/storage', () => ({
+  computeDownloadsUsage: jest.fn(async () => 1024),
+  formatBytes: (n: number) => `${n} B`,
 }));
 
 jest.mock('@/src/features/favorites/downloaded', () => ({
@@ -153,6 +247,7 @@ jest.mock('@/src/features/favorites/downloaded', () => ({
 describe('CatalogScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPickRandom.mockResolvedValue(undefined);
     mockFetchHomeMovies.mockResolvedValue({ items: [], hasMore: false });
   });
 
@@ -177,6 +272,38 @@ describe('CatalogScreen', () => {
     mockFetchHomeMovies.mockRejectedValueOnce(new Error('home down'));
     await render(<CatalogScreen />);
     await waitFor(() => expect(screen.getByText('home down')).toBeTruthy());
+  });
+
+  it('opens a lucky title and ignores empty lucky', async () => {
+    const mockPush = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({
+      push: mockPush,
+      back: jest.fn(),
+      replace: jest.fn(),
+      canGoBack: jest.fn(() => true),
+    });
+    mockPickRandom.mockResolvedValueOnce(undefined);
+    await render(<CatalogScreen />);
+    await fireEvent.press(screen.getByText(t('catalog.lucky')));
+    await waitFor(() => expect(mockPickRandom).toHaveBeenCalled());
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText(t('catalog.luckyEmpty'))).toBeTruthy();
+
+    mockPickRandom.mockResolvedValueOnce({
+      id: 'lucky1',
+      href: '/lucky.html',
+      title: 'Lucky Film',
+      posterUrl: 'https://p',
+    });
+    await fireEvent.press(screen.getByText(t('catalog.lucky')));
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pathname: '/movie/[id]',
+          params: expect.objectContaining({ id: 'lucky1', title: 'Lucky Film' }),
+        })
+      )
+    );
   });
 });
 
@@ -457,5 +584,95 @@ describe('FavoritesScreen', () => {
     await fireEvent(screen.getByTestId('grid-long'), 'onLongPress');
     await fireEvent.press(screen.getByText(t('common.cancel')));
     expect(mockRemoveFavorite).not.toHaveBeenCalled();
+  });
+
+  it('switches library segments', async () => {
+    await render(<FavoritesScreen />);
+    await fireEvent.press(screen.getByText(t('favorites.queue')));
+    expect(screen.getByText('Queued')).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('favorites.rewatch')));
+    expect(screen.getByText('Rewatch Me')).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('favorites.history')));
+    expect(screen.getByText('Watched Once')).toBeTruthy();
+    expect(screen.getByText(`${'Serial Show'} — ${t('downloads.episodeBadge', { season: 1, episode: 2 })}`)).toBeTruthy();
+    expect(screen.queryByText(`${'Serial Show'} — ${t('downloads.episodeBadge', { season: 1, episode: 1 })}`)).toBeNull();
+    await fireEvent.press(screen.getByText('My Shelf'));
+    expect(screen.getByText('Custom Film')).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('favorites.title')));
+    expect(screen.getByText('Fav Film')).toBeTruthy();
+  });
+
+  it('stat tiles jump to history, favorites, and downloads', async () => {
+    const mockPush = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({
+      push: mockPush,
+      back: jest.fn(),
+      replace: jest.fn(),
+      canGoBack: jest.fn(() => true),
+    });
+    await render(<FavoritesScreen />);
+    await fireEvent.press(screen.getByTestId('library-stat-hours'));
+    expect(screen.getByText('Watched Once')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('library-stat-favorites'));
+    expect(screen.getByText('Fav Film')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('library-stat-downloads'));
+    expect(mockPush).toHaveBeenCalledWith('/(tabs)/downloads');
+  });
+
+  it('deletes a custom list from the chip and returns to favorites', async () => {
+    await render(<FavoritesScreen />);
+    await fireEvent.press(screen.getByText('My Shelf'));
+    expect(screen.getByText('Custom Film')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('library-list-delete-custom1'));
+    expect(screen.getByText(t('favorites.deleteListTitle'))).toBeTruthy();
+    expect(
+      screen.getByText(t('favorites.deleteListMessage', { name: 'My Shelf' }))
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+    expect(mockDeleteList).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId('library-list-delete-custom1'));
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockDeleteList).toHaveBeenCalledWith('custom1'));
+    expect(screen.getByText('Fav Film')).toBeTruthy();
+  });
+
+  it('long-presses a custom chip to confirm delete', async () => {
+    await render(<FavoritesScreen />);
+    await fireEvent(screen.getByTestId('library-list-chip-custom1'), 'onLongPress');
+    expect(screen.getByText(t('favorites.deleteListTitle'))).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockDeleteList).toHaveBeenCalledWith('custom1'));
+  });
+
+  it('long-press removes a queue item and a history title', async () => {
+    await render(<FavoritesScreen />);
+    await fireEvent.press(screen.getByText(t('favorites.queue')));
+    await fireEvent(screen.getByTestId('grid-long'), 'onLongPress');
+    expect(screen.getByText(t('favorites.removeListTitle'))).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockRemoveListItem).toHaveBeenCalledWith('queue', 'q1'));
+
+    await fireEvent.press(screen.getByText(t('favorites.rewatch')));
+    await fireEvent(screen.getByTestId('grid-long'), 'onLongPress');
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockRemoveListItem).toHaveBeenCalledWith('rewatch', 'r1'));
+
+    await fireEvent.press(screen.getByText('My Shelf'));
+    await fireEvent(screen.getByTestId('grid-long'), 'onLongPress');
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockRemoveListItem).toHaveBeenCalledWith('custom1', 'c1'));
+
+    await fireEvent.press(screen.getByText(t('favorites.history')));
+    await fireEvent(screen.getByTestId('grid-long'), 'onLongPress');
+    expect(screen.getByText(t('favorites.removeHistoryTitle'))).toBeTruthy();
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => expect(mockRemoveHistory).toHaveBeenCalledWith('h1'));
+    await fireEvent(screen.getByTestId('grid-long-s1'), 'onLongPress');
+    await fireEvent.press(screen.getByText(t('common.delete')));
+    await waitFor(() => {
+      expect(mockRemoveHistory).toHaveBeenCalledWith('s1_s1e1');
+      expect(mockRemoveHistory).toHaveBeenCalledWith('s1_s1e2');
+    });
   });
 });

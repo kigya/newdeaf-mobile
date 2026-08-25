@@ -1,7 +1,7 @@
 # Screen: Offline player
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Route:** `/offline/[downloadId]` — fullScreenModal, fade, no header
 - **Related code:** `app/offline/[downloadId].tsx` → `src/screens/offline-player/`, `OfflinePlayer`, `prepareLocalSource`, `MediaPlayer`, VTT
 
@@ -20,7 +20,7 @@
 1. Load download record; verify playlist/file exists
 2. If resumable progress for catalog movie id → Continue / Start over dialog
 3. `OfflinePlayer` prepares local URI (HLS relative → absolute `file://`, strip legacy BYTERANGE, ensure `#EXT-X-ENDLIST`; progressive passthrough)
-4. `MediaPlayer` (expo-video) with optional local VTT overlay
+4. `MediaPlayer` (expo-video) with optional local VTT overlay, skip-intro in marker window, “remember skip point”
 5. Progress keyed by catalog movie id (`catalogMovieIdFromDownloadMovieId`); close → `router.back()` + flush
 
 ## States

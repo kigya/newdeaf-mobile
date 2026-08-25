@@ -40,8 +40,13 @@ const mockPickEpisodeEntry = jest.fn(() => ({
 }));
 const mockOpenBrowserAsync = jest.fn(async () => ({ type: 'dismiss' }));
 const mockListCompletedDownloads = jest.fn(() => [] as unknown[]);
-const mockResolveEmbedStream = jest.fn<Promise<StreamPayload | null>, [string]>();
-const mockIsResolvableEmbedUrl = jest.fn((url: string) => /embess\.ws|fsst\.online|incvideo/i.test(url));
+const mockResolveEmbedStream = jest.fn<
+  Promise<StreamPayload | null>,
+  [string, { season?: number; episode?: number }?]
+>();
+const mockIsResolvableEmbedUrl = jest.fn((url: string) =>
+  /embess\.ws|namy\.ws|domem\.ws|fsst\.online|incvideo/i.test(url)
+);
 
 let mockFavoriteItems: { id: string }[] = [];
 let mockDownloadItems: unknown[] = [];
@@ -97,8 +102,9 @@ jest.mock('@/src/data/catalog/kinopoisk', () => ({
 
 jest.mock('@/src/data/catalog/embedStreams', () => ({
   isResolvableEmbedUrl: (url: string) => mockIsResolvableEmbedUrl(url),
-  resolveEmbedStream: (url: string) => mockResolveEmbedStream(url),
-  isEmbessPlayerUrl: (url: string) => /embess\.ws/i.test(url),
+  resolveEmbedStream: (url: string, opts?: { season?: number; episode?: number }) =>
+    (mockResolveEmbedStream as jest.Mock)(url, opts),
+  isEmbessPlayerUrl: (url: string) => /embess\.ws|namy\.ws|domem\.ws/i.test(url),
 }));
 
 jest.mock('@/src/features/favorites/store', () => ({
@@ -142,16 +148,43 @@ jest.mock('@/src/shared/ui/DownloadSheet', () => {
       visible,
       onClose,
       title,
+      playerUrl,
+      initialAudioLabel,
     }: {
       visible: boolean;
       onClose: () => void;
       title?: string;
+      playerUrl?: string;
+      initialAudioLabel?: string;
     }) =>
       visible
         ? ReactLocal.createElement(
             Pressable,
             { testID: 'download-sheet', onPress: onClose },
-            ReactLocal.createElement(Text, null, `sheet:${title}`)
+            ReactLocal.createElement(Text, null, `sheet:${title}`),
+            ReactLocal.createElement(Text, null, `sheet-url:${playerUrl ?? ''}`),
+            ReactLocal.createElement(Text, null, `sheet-audio:${initialAudioLabel ?? ''}`)
+          )
+        : null,
+  };
+});
+
+jest.mock('@/src/shared/ui/ListPickerSheet', () => {
+  const ReactLocal = require('react');
+  const { Pressable, Text } = require('react-native');
+  return {
+    ListPickerSheet: ({
+      visible,
+      onClose,
+    }: {
+      visible: boolean;
+      onClose: () => void;
+    }) =>
+      visible
+        ? ReactLocal.createElement(
+            Pressable,
+            { testID: 'list-picker', onPress: onClose },
+            ReactLocal.createElement(Text, null, 'list-picker')
           )
         : null,
   };
@@ -326,7 +359,7 @@ describe('MovieDetailScreen', () => {
     mockResolveEmbedStream.mockResolvedValue(null);
     mockIsResolvableEmbedUrl.mockReset();
     mockIsResolvableEmbedUrl.mockImplementation((url: string) =>
-      /embess\.ws|fsst\.online|incvideo/i.test(String(url))
+      /embess\.ws|namy\.ws|domem\.ws|fsst\.online|incvideo/i.test(String(url))
     );
     mockEnrichFromKinopoisk.mockImplementation(
       async (
@@ -415,6 +448,10 @@ describe('MovieDetailScreen', () => {
     await waitFor(() => expect(screen.getAllByText('Test Movie').length).toBeGreaterThan(0));
     expect(screen.getByText(t('common.watch'))).toBeTruthy();
     expect(screen.getByText(t('common.download'))).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('movie-add-to-list'));
+    await waitFor(() => expect(screen.getByTestId('list-picker')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('list-picker'));
+    await waitFor(() => expect(screen.queryByTestId('list-picker')).toBeNull());
   });
 
   it('shows error state when fetch fails', async () => {
@@ -671,9 +708,116 @@ describe('MovieDetailScreen', () => {
     });
     await render(<MovieDetailScreen />);
     await waitFor(() => expect(screen.getByText('Default')).toBeTruthy());
-    expect(mockResolveEmbedStream).toHaveBeenCalledWith('https://api.embess.ws/embed/movie/1');
-    expect(mockResolveEmbedStream).toHaveBeenCalledWith('https://fsst.online/embed/1019620/');
+    expect(mockResolveEmbedStream).toHaveBeenCalledWith(
+      'https://api.embess.ws/embed/movie/1',
+      undefined
+    );
+    expect(mockResolveEmbedStream).toHaveBeenCalledWith(
+      'https://fsst.online/embed/1019620/',
+      undefined
+    );
     expect(screen.queryByText(t('movie.downloadUnavailable'))).toBeNull();
+  });
+
+  it('applies season/episode from fsst playlist resolve', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        nativePlayer: false,
+        playerUrl: 'https://fsst.online/playlist_iframe/17980/',
+      })
+    );
+    mockResolveEmbedStream.mockResolvedValue({
+      progressive: true,
+      hlsSource: [
+        {
+          label: 'Кухня 2-1',
+          quality: { '360': 'https://cdn/e1.mp4' },
+          season: 2,
+          episode: 1,
+        },
+      ],
+      tracks: [{ kind: 'captions', label: '—', src: '' }],
+    });
+    await render(<MovieDetailScreen />);
+    await waitFor(() => expect(screen.getByText('Кухня 2-1')).toBeTruthy());
+    expect(screen.queryByText(t('movie.downloadUnavailable'))).toBeNull();
+  });
+
+  it('resolves embess sibling tracks when a native balancer is also present', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        fallbackPlayerUrl: 'https://api.embess.ws/embed/movie/76587',
+      })
+    );
+    mockResolveEmbedStream.mockResolvedValue({
+      hlsSource: [
+        {
+          label: 'Eng.Original',
+          quality: { '720': 'https://cdn/e1.m3u8' },
+          season: 1,
+          episode: 1,
+        },
+      ],
+      tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+    });
+    await render(<MovieDetailScreen />);
+    await waitFor(() => expect(screen.getByText('Eng.Original')).toBeTruthy());
+    expect(mockResolveEmbedStream).toHaveBeenCalledWith(
+      'https://api.embess.ws/embed/movie/76587',
+      expect.objectContaining({ season: 1, episode: 1 })
+    );
+    expect(screen.getByText('Рус. полные')).toBeTruthy();
+    expect(screen.queryByText('Original')).toBeNull();
+    await fireEvent.press(screen.getByText('Eng.Original'));
+    await waitFor(() => expect(screen.getByTestId('download-sheet')).toBeTruthy());
+    expect(screen.getByText('sheet-audio:Eng.Original')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('download-sheet'));
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(screen.getByTestId('download-sheet')).toBeTruthy());
+    expect(screen.getByText('sheet-audio:')).toBeTruthy();
+    expect(
+      screen.getByText('sheet-url:https://api.embess.ws/embed/movie/76587')
+    ).toBeTruthy();
+  });
+
+  it('shows tracksUnavailable when native sibling embess returns no streams', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        fallbackPlayerUrl: 'https://api.embess.ws/embed/movie/76587',
+      })
+    );
+    mockResolveEmbedStream.mockResolvedValue({ hlsSource: [], tracks: [] });
+    await render(<MovieDetailScreen />);
+    await waitFor(() =>
+      expect(screen.getByText(t('movie.tracksUnavailable'))).toBeTruthy()
+    );
+    expect(screen.getByText(t('movie.downloadUnavailable'))).toBeTruthy();
+  });
+
+  it('shows tracksUnavailable when native sibling embess resolve throws', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        fallbackPlayerUrl: 'https://api.embess.ws/embed/movie/76587',
+      })
+    );
+    mockResolveEmbedStream.mockRejectedValue(new Error('embed down'));
+    await render(<MovieDetailScreen />);
+    await waitFor(() =>
+      expect(screen.getByText(t('movie.tracksUnavailable'))).toBeTruthy()
+    );
+  });
+
+  it('does not open native download sheet while embess sibling is still resolving', async () => {
+    mockFetchMovieDetail.mockResolvedValue(
+      baseMovie({
+        fallbackPlayerUrl: 'https://api.embess.ws/embed/movie/76587',
+      })
+    );
+    mockResolveEmbedStream.mockImplementation(() => new Promise(() => {}));
+    await render(<MovieDetailScreen />);
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    expect(screen.queryByTestId('download-sheet')).toBeNull();
   });
 
   it('shows tracksUnavailable when embess resolve throws', async () => {
@@ -706,9 +850,8 @@ describe('MovieDetailScreen', () => {
     await render(<MovieDetailScreen />);
     await waitFor(() => expect(screen.getByText(t('movie.watchTrailer'))).toBeTruthy());
     await fireEvent.press(screen.getByText(t('movie.watchTrailer')));
-    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(
-      'https://www.youtube.com/watch?v=abc123XYZ'
-    );
+    expect(mockPush).toHaveBeenCalledWith('/trailer/abc123XYZ');
+    expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
 
     await waitFor(() => expect(screen.getByText('Original')).toBeTruthy());
     expect(screen.getByText('EN')).toBeTruthy();

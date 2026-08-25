@@ -27,6 +27,9 @@ import {
   mediaRequestHeaders,
   mediaSegmentHeaders,
   pickSubtitleTrack,
+  pickPreferredAudioIndex,
+  orderAudioSources,
+  audioPreferenceScore,
   resolveMediaUrl,
   resolveVariantPlaylist,
 } from '@/src/features/downloads/hls';
@@ -532,6 +535,33 @@ describe('pickSubtitleTrack re-export', () => {
       ])?.src
     ).toBe('r');
     expect(pickSubtitleTrack([{ label: 'Deutsch', src: 'd' }])?.src).toBe('d');
+  });
+});
+
+describe('pickPreferredAudioIndex', () => {
+  it('prefers Eng.Original over dubs and skips empty', () => {
+    expect(pickPreferredAudioIndex([])).toBe(0);
+    expect(audioPreferenceScore('delete')).toBeLessThan(0);
+    expect(audioPreferenceScore('—')).toBeLessThan(0);
+    expect(
+      pickPreferredAudioIndex([
+        { label: 'HDRezka Studio' },
+        { label: 'TVShows' },
+        { label: 'Eng.Original' },
+      ])
+    ).toBe(2);
+    expect(pickPreferredAudioIndex([{ label: 'Original' }, { label: 'Dub' }])).toBe(0);
+    expect(pickPreferredAudioIndex([{ label: 'LostFilm' }, { label: 'English' }])).toBe(1);
+    expect(pickPreferredAudioIndex([{ label: 'Dub' }, { label: 'ENG' }])).toBe(1);
+    expect(audioPreferenceScore('Англ. оригинал')).toBeGreaterThan(90);
+    expect(audioPreferenceScore('Studio Original')).toBeGreaterThan(80);
+    expect(audioPreferenceScore('(English) 1')).toBeGreaterThan(50);
+    expect(audioPreferenceScore('-')).toBeLessThan(0);
+    expect(orderAudioSources([{ label: 'HDRezka' }, { label: 'Eng.Original' }]).map((s) => s.label)).toEqual([
+      'Eng.Original',
+      'HDRezka',
+    ]);
+    expect(orderAudioSources([{ label: 'Solo' }])).toEqual([{ label: 'Solo' }]);
   });
 });
 

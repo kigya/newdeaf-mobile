@@ -1,3 +1,13 @@
+const mockRecordHistory = jest.fn(async () => ({ id: 'hist' }));
+
+jest.mock('@/src/features/watch-history/store', () => ({
+  useWatchHistoryStore: {
+    getState: () => ({
+      record: mockRecordHistory,
+    }),
+  },
+}));
+
 jest.mock('@/src/features/watch-progress/db', () => ({
   listWatchProgress: jest.fn(async () => []),
   upsertWatchProgress: jest.fn(async (input) => ({
@@ -39,6 +49,8 @@ import {
 describe('watch-progress store', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRecordHistory.mockReset();
+    mockRecordHistory.mockResolvedValue({ id: 'hist' });
     useWatchProgressStore.setState({
       items: [],
       hydrated: false,
@@ -303,6 +315,7 @@ describe('watch-progress store', () => {
       source: 'online',
       saveGeneration: 1,
     });
+    await Promise.resolve();
     useWatchProgressStore.setState({
       items: [],
       saveGenerations: { '1': 5 },
@@ -338,6 +351,7 @@ describe('watch-progress store', () => {
       source: 'online',
       saveGeneration: 1,
     });
+    await Promise.resolve();
     // Clear generation map mid-flight so `?? 0` runs after await.
     useWatchProgressStore.setState({
       items: [],
@@ -399,5 +413,28 @@ describe('watch-progress store', () => {
     expect(getWatchProgress).toHaveBeenCalledWith('1', 1, 2);
     expect(await fetchLatestProgressForMovie('m')).toEqual({ id: '2' });
     expect(getLatestWatchProgressForMovie).toHaveBeenCalledWith('m');
+  });
+
+  it('records watch history and ignores history failures', async () => {
+    await useWatchProgressStore.getState().upsert({
+      movieId: '1',
+      positionSec: 60,
+      durationSec: 3600,
+      title: 'A',
+      source: 'online',
+    });
+    expect(mockRecordHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ movieId: '1', completed: false })
+    );
+
+    mockRecordHistory.mockRejectedValueOnce(new Error('history down'));
+    const saved = await useWatchProgressStore.getState().upsert({
+      movieId: '2',
+      positionSec: 40,
+      durationSec: 3600,
+      title: 'B',
+      source: 'online',
+    });
+    expect(saved?.movieId).toBe('2');
   });
 });

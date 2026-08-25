@@ -2,7 +2,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { create } from 'zustand';
 
 import type { StreamPayload } from '@/src/data/catalog/types';
-import { isEmbessPlayerUrl } from '@/src/data/catalog/embedStreams';
+import {
+  isEmbessPlayerUrl,
+  isFsstPlayerUrl,
+  isProgressiveMediaUrl,
+  isResolvableEmbedUrl,
+  resolveEmbedStream,
+} from '@/src/data/catalog/embedStreams';
 import { deleteDownloadRow, getDownload, listDownloads, upsertDownload } from './db';
 import {
   startDownloadForeground,
@@ -11,18 +17,37 @@ import {
 } from './foreground';
 import { downloadHlsToDirectory, downloadTextFile, pickPrimaryMediaUrl, pickSubtitleTrack } from './hls';
 import { withMediaFetchPlayer } from './mediaFetch';
-import { downloadProgressiveFile } from './progressive';
-import type { DownloadRecord, DownloadRequest, YoutubeDownloadRequest } from './types';
+import { downloadProgressiveFile, progressiveMediaHeaders } from './progressive';
+import { DownloadGateError } from './errors';
+import { currentWifiOnlyBlocked } from './network';
+import { computeDownloadsUsage, computePathUsage, isStorageCapBlocked } from './storage';
+import type {
+  DownloadMediaKind,
+  DownloadRecord,
+  DownloadRequest,
+  EnqueueOptions,
+  YoutubeDownloadRequest,
+} from './types';
 import { resolveYoutubeStream } from './youtube';
 import { t } from '@/src/shared/i18n';
+import { useSettingsStore } from '@/src/features/settings/store';
+
+export function inferMovieMediaKind(streamUrl: string, explicit?: DownloadMediaKind): DownloadMediaKind {
+  if (explicit === 'progressive' || explicit === 'hls') return explicit;
+  return isProgressiveMediaUrl(streamUrl) ? 'progressive' : 'hls';
+}
 
 type DownloadsState = {
   items: DownloadRecord[];
   hydrated: boolean;
   activeId: string | null;
   hydrate: () => Promise<void>;
-  enqueue: (request: DownloadRequest) => Promise<string>;
-  enqueueYoutube: (youtubeUrl: string, preferredQuality?: string) => Promise<string>;
+  enqueue: (request: DownloadRequest, opts?: EnqueueOptions) => Promise<string>;
+  enqueueYoutube: (
+    youtubeUrl: string,
+    preferredQuality?: string,
+    opts?: EnqueueOptions
+  ) => Promise<string>;
   retry: (id: string) => Promise<void>;
   /** Finish movie retry after StreamResolver captured fresh HLS URLs. */
   completeMovieRetry: (id: string, payload: StreamPayload) => Promise<void>;
@@ -66,6 +91,18 @@ function enqueueMovieJob(task: () => Promise<void>): void {
   movieJobChain = movieJobChain.then(task, task).catch((e) => {
     console.warn('[downloads] movie queue error', e);
   });
+}
+
+async function assertDownloadAllowed(force?: boolean): Promise<void> {
+  if (force) return;
+  const { downloadsWifiOnly, storageCapMb } = useSettingsStore.getState();
+  if (await currentWifiOnlyBlocked(downloadsWifiOnly)) {
+    throw new DownloadGateError('wifi', t('downloads.wifiBlocked'));
+  }
+  const used = await computeDownloadsUsage();
+  if (isStorageCapBlocked(used, storageCapMb)) {
+    throw new DownloadGateError('storage', t('downloads.storageBlocked'));
+  }
 }
 
 function makeId(movieId: string, quality: string, audioLabel: string, season?: number, episode?: number) {
@@ -185,6 +222,7 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
   const signal = getAbortSignal(id);
   await startDownloadForeground(request.title);
   const reporter = createProgressReporter(request.title);
+  const mediaKind = inferMovieMediaKind(request.hlsUrl, request.mediaKind);
   try {
     if (signal.aborted) return;
     const baseDir = existingDir ?? downloadDirForId(id);
@@ -204,12 +242,14 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       createdAt: Date.now(),
       updatedAt: Date.now(),
       playerUrl: request.playerUrl,
-      hlsUrl: request.hlsUrl,
+      hlsUrl: mediaKind === 'hls' ? request.hlsUrl : undefined,
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind,
       season: request.season,
       episode: request.episode,
+      skipTimeSec: request.skipTimeSec,
+      removeTimeSec: request.removeTimeSec,
     };
 
     const prior = await getDownload(id);
@@ -225,23 +265,28 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       error: undefined,
       progress: prior.progress > 0 && prior.progress < 1 ? prior.progress : 0,
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind,
     };
 
     if (signal.aborted) return;
     await persist(current);
     patchItemInStore(current, id);
 
-    const preferredHeight = Number(request.quality) || 720;
-    const hlsOptions = request.audioPlaylistUrl
-      ? { audioPlaylistUrl: request.audioPlaylistUrl, audioLabel: request.audioLabel }
-      : undefined;
+    const downloadSubs = async (): Promise<string | undefined> => {
+      if (!request.subtitleUrl?.trim()) return undefined;
+      const subs = `${baseDir}subs.vtt`;
+      await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
+      return subs;
+    };
 
-    const runHlsAndSubs = async () => {
-      const { playlistPath: path } = await downloadHlsToDirectory(
+    let playlistPath: string;
+    let subtitlePath: string | undefined;
+
+    if (mediaKind === 'progressive') {
+      const dest = `${baseDir}video.mp4`;
+      playlistPath = await downloadProgressiveFile(
         request.hlsUrl,
-        baseDir,
-        preferredHeight,
+        dest,
         (progress) => {
           if (signal.aborted) return;
           current = {
@@ -252,35 +297,72 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
           };
           void reporter.report(current);
         },
-        request.playerUrl,
-        signal,
-        hlsOptions
+        progressiveMediaHeaders(request.hlsUrl, request.playerUrl)
       );
-
       await reporter.flushPending();
       if (signal.aborted) {
         const err = new Error('Download cancelled');
         err.name = 'AbortError';
         throw err;
       }
+      subtitlePath = await downloadSubs();
+    } else {
+      const preferredHeight = Number(request.quality) || 720;
+      const hlsOptions = request.audioPlaylistUrl
+        ? { audioPlaylistUrl: request.audioPlaylistUrl, audioLabel: request.audioLabel }
+        : undefined;
 
-      const subs = `${baseDir}subs.vtt`;
-      if (request.subtitleUrl?.trim()) {
-        await downloadTextFile(request.subtitleUrl, subs, request.playerUrl);
-        return { playlistPath: path, subtitlePath: subs };
-      }
-      return { playlistPath: path, subtitlePath: undefined as string | undefined };
-    };
+      const runHlsAndSubs = async () => {
+        const { playlistPath: path } = await downloadHlsToDirectory(
+          request.hlsUrl,
+          baseDir,
+          preferredHeight,
+          (progress) => {
+            if (signal.aborted) return;
+            current = {
+              ...current,
+              progress: Math.min(0.92, progress * 0.92),
+              status: 'downloading',
+              updatedAt: Date.now(),
+            };
+            void reporter.report(current);
+          },
+          request.playerUrl,
+          signal,
+          hlsOptions
+        );
 
-    // Embess CDN accepts OkHttp with embess Referer — skip bnsi MediaFetch WebView.
-    const { playlistPath, subtitlePath } = isEmbessPlayerUrl(request.playerUrl)
-      ? await runHlsAndSubs()
-      : await withMediaFetchPlayer(request.playerUrl, runHlsAndSubs);
+        await reporter.flushPending();
+        if (signal.aborted) {
+          const err = new Error('Download cancelled');
+          err.name = 'AbortError';
+          throw err;
+        }
+
+        const subsPath = await downloadSubs();
+        return { playlistPath: path, subtitlePath: subsPath };
+      };
+
+      // Embess / fsst: OkHttp with player Referer — skip bnsi MediaFetch WebView.
+      const skipMediaFetch =
+        isEmbessPlayerUrl(request.playerUrl) || isFsstPlayerUrl(request.playerUrl);
+      const result = skipMediaFetch
+        ? await runHlsAndSubs()
+        : await withMediaFetchPlayer(request.playerUrl, runHlsAndSubs);
+      playlistPath = result.playlistPath;
+      subtitlePath = result.subtitlePath;
+    }
 
     if (signal.aborted) return;
     const stillExists = await getDownload(id);
     if (!stillExists) return;
 
+    let sizeBytes: number | undefined;
+    try {
+      sizeBytes = await computePathUsage(baseDir);
+    } catch {
+      sizeBytes = undefined;
+    }
     current = {
       ...current,
       status: 'completed',
@@ -289,10 +371,13 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       subtitlePath,
       updatedAt: Date.now(),
       error: undefined,
-      hlsUrl: request.hlsUrl,
+      hlsUrl: mediaKind === 'hls' ? request.hlsUrl : current.hlsUrl,
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind,
+      skipTimeSec: request.skipTimeSec ?? current.skipTimeSec,
+      removeTimeSec: request.removeTimeSec ?? current.removeTimeSec,
+      sizeBytes,
     };
     await persist(current);
     patchItemInStore(current, null);
@@ -466,7 +551,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     set({ items: await listDownloads() });
   },
 
-  enqueue: async (request) => {
+  enqueue: async (request, opts) => {
+    await assertDownloadAllowed(opts?.force);
     bumpMutation();
     const id = makeId(
       request.movieId,
@@ -476,6 +562,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       request.episode
     );
     const now = Date.now();
+    const mediaKind = inferMovieMediaKind(request.hlsUrl, request.mediaKind);
     const record: DownloadRecord = {
       id,
       movieId: request.movieId,
@@ -489,21 +576,24 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       playerUrl: request.playerUrl,
-      hlsUrl: request.hlsUrl,
+      hlsUrl: mediaKind === 'hls' ? request.hlsUrl : undefined,
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind,
       season: request.season,
       episode: request.episode,
+      skipTimeSec: request.skipTimeSec,
+      removeTimeSec: request.removeTimeSec,
     };
     await persist(record);
     patchItemInStore(record, id);
 
-    enqueueMovieJob(() => runDownloadJob(id, request));
+    enqueueMovieJob(() => runDownloadJob(id, { ...request, mediaKind }));
     return id;
   },
 
-  enqueueYoutube: async (youtubeUrl, preferredQuality) => {
+  enqueueYoutube: async (youtubeUrl, preferredQuality, opts) => {
+    await assertDownloadAllowed(opts?.force);
     bumpMutation();
     const resolved = await resolveYoutubeStream(youtubeUrl, preferredQuality);
     const id = makeYoutubeId(resolved.videoId);
@@ -583,6 +673,20 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     if (!item.playerUrl) {
       throw new Error(t('store.noRetryParams'));
     }
+
+    // Non-native embeds: rematch via HTTP resolve (bnsi StreamResolver never fires).
+    if (isResolvableEmbedUrl(item.playerUrl)) {
+      const payload = await resolveEmbedStream(item.playerUrl, {
+        season: item.season,
+        episode: item.episode,
+      });
+      if (!payload?.hlsSource?.length) {
+        throw new Error(t('store.retryNoStreams'));
+      }
+      await useDownloadsStore.getState().completeMovieRetry(id, payload);
+      return;
+    }
+
     // Bust player HTTP cache so bnsi returns fresh signed HLS URLs.
     const bust = `_nd=${Date.now()}`;
     const playerUrl = item.playerUrl.includes('?')
@@ -597,7 +701,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       progress: 0,
       updatedAt: Date.now(),
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind: item.mediaKind === 'progressive' ? 'progressive' : 'hls',
     };
     await persist(updated);
     patchItemInStore(updated, id);
@@ -634,19 +738,26 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       throw new Error(t('store.retryNoStreams'));
     }
 
+    const quality =
+      item.quality in audio.quality ? item.quality : Object.keys(audio.quality)[0];
+    const mediaKind = inferMovieMediaKind(
+      hlsUrl,
+      payload.progressive ? 'progressive' : undefined
+    );
     const request: DownloadRequest = {
       movieId: item.movieId,
       title: item.title,
       posterUrl: item.posterUrl,
       playerUrl: item.playerUrl,
       audioLabel: audio.label,
-      quality: item.quality in audio.quality ? item.quality : Object.keys(audio.quality)[0],
+      quality,
       subtitleLabel: subtitle.label,
       hlsUrl: pickPrimaryMediaUrl(hlsUrl),
       subtitleUrl: subtitle.src ? subtitle.src : '',
       audioPlaylistUrl: audio.audioId ? audio.audioId : undefined,
-      season: item.season,
-      episode: item.episode,
+      mediaKind,
+      season: audio.season ?? item.season,
+      episode: audio.episode ?? item.episode,
     };
 
     const baseDir = item.videoDir ?? downloadDirForId(id);
@@ -662,7 +773,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       audioLabel: request.audioLabel,
       quality: request.quality,
       subtitleLabel: request.subtitleLabel,
-      hlsUrl: request.hlsUrl,
+      hlsUrl: mediaKind === 'hls' ? request.hlsUrl : undefined,
       subtitleUrl: request.subtitleUrl,
       status: 'queued',
       progress: 0,
@@ -672,7 +783,11 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       videoDir: baseDir,
       updatedAt: Date.now(),
       source: 'movie',
-      mediaKind: 'hls',
+      mediaKind,
+      season: request.season,
+      episode: request.episode,
+      skipTimeSec: request.skipTimeSec ?? item.skipTimeSec,
+      removeTimeSec: request.removeTimeSec ?? item.removeTimeSec,
     };
     await persist(updated);
     patchItemInStore(updated, id);

@@ -28,6 +28,13 @@ export type DownloadRecord = {
   youtubeUrl?: string;
   season?: number;
   episode?: number;
+  skipTimeSec?: number;
+  removeTimeSec?: number;
+  sizeBytes?: number;
+};
+
+export type EnqueueOptions = {
+  force?: boolean;
 };
 
 export type DownloadRequest = {
@@ -42,8 +49,12 @@ export type DownloadRequest = {
   subtitleUrl: string;
   /** Demuxed EXT-X-MEDIA audio playlist (embess); optional. */
   audioPlaylistUrl?: string;
+  /** Progressive MP4 when set; defaults to hls for movie downloads. */
+  mediaKind?: DownloadMediaKind;
   season?: number;
   episode?: number;
+  skipTimeSec?: number;
+  removeTimeSec?: number;
 };
 
 export type YoutubeDownloadRequest = {

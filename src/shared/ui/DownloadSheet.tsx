@@ -11,10 +11,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isResolvableEmbedUrl, resolveEmbedStream } from '@/src/data/catalog/embedStreams';
+import { parseRemoveTimeSec, parseSkipTimeSec } from '@/src/data/catalog/streamMarkers';
+import { isDownloadGateError } from '@/src/features/downloads/errors';
+import { planSeasonDownload } from '@/src/features/downloads/season';
 import type { StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { sheetStyles } from '@/src/shared/ui/sheetStyles';
-import { pickPrimaryMediaUrl, pickSubtitleTrack } from '@/src/features/downloads/hls';
+import {
+  orderAudioSources,
+  pickPreferredAudioIndex,
+  pickPrimaryMediaUrl,
+  pickSubtitleTrack,
+} from '@/src/features/downloads/hls';
 import { findAnyExistingMovie, findExistingSameTracks } from '@/src/features/downloads/match';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import type { DownloadRecord } from '@/src/features/downloads/types';
@@ -35,6 +43,8 @@ type Props = {
   playerUrl: string;
   /** Pre-resolved streams (embess embed); skips bnsi StreamResolver when set. */
   initialStream?: StreamPayload | null;
+  /** When set, pre-select this audio label (e.g. chip tap on movie detail). */
+  initialAudioLabel?: string;
   season?: number;
   episode?: number;
 };
@@ -48,6 +58,7 @@ export function DownloadSheet({
   posterUrl,
   playerUrl,
   initialStream,
+  initialAudioLabel,
   season,
   episode,
 }: Props) {
@@ -65,6 +76,8 @@ export function DownloadSheet({
   const [starting, setStarting] = useState(false);
   const [dupDialog, setDupDialog] = useState<'exact' | 'other' | null>(null);
   const [dupExisting, setDupExisting] = useState<DownloadRecord | null>(null);
+  const [gate, setGate] = useState<'wifi' | 'storage' | null>(null);
+  const [gateMode, setGateMode] = useState<'single' | 'season'>('single');
 
   const sources = payload?.hlsSource ?? [];
   const tracks = payload?.tracks ?? [];
@@ -72,6 +85,15 @@ export function DownloadSheet({
   const selectedSubtitle = tracks[subtitleIndex];
   const qualities = useMemo(() => qualityOptions(selected), [selected]);
   const hasInitial = Boolean(initialStream?.hlsSource?.length);
+  const missingSeason = useMemo(() => {
+    const refs = sources
+      .filter((s) => s.season != null && s.episode != null)
+      .map((s) => ({ season: s.season as number, episode: s.episode as number }));
+    if (refs.length < 2) return [];
+    return planSeasonDownload(refs, items, {
+      movieId: movieId.replace(/_s\d+_e\d+$/i, ''),
+    });
+  }, [sources, items, movieId]);
 
   const applyPayload = useCallback(
     (data: StreamPayload) => {
@@ -79,10 +101,18 @@ export function DownloadSheet({
         setError(t('downloadSheet.emptyStreams'));
         return;
       }
-      setPayload(data);
+      const ordered = orderAudioSources(data.hlsSource);
+      setPayload({ ...data, hlsSource: ordered });
       setError(null);
-      const first = data.hlsSource[0];
-      const qs = qualityOptions(first);
+      const wanted = initialAudioLabel?.trim().toLowerCase();
+      let audioIdx = pickPreferredAudioIndex(ordered);
+      if (wanted) {
+        const found = ordered.findIndex((s) => s.label.trim().toLowerCase() === wanted);
+        if (found >= 0) audioIdx = found;
+      }
+      setAudioIndex(audioIdx);
+      const selectedAudio = ordered[audioIdx];
+      const qs = qualityOptions(selectedAudio);
       setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
       const trackList = data.tracks || [];
       const preferred = pickSubtitleTrack(trackList);
@@ -93,7 +123,7 @@ export function DownloadSheet({
         setSubtitleIndex(Math.max(0, idx));
       }
     },
-    [preferredDownloadQuality]
+    [initialAudioLabel, preferredDownloadQuality]
   );
 
   const onResolved = useCallback(
@@ -121,7 +151,7 @@ export function DownloadSheet({
       setError(null);
       void (async () => {
         try {
-          const data = await resolveEmbedStream(playerUrl);
+          const data = await resolveEmbedStream(playerUrl, { season, episode });
           /* istanbul ignore next -- sheet closed while resolving */
           if (cancelled) return;
           if (data?.hlsSource?.length) applyPayload(data);
@@ -136,36 +166,73 @@ export function DownloadSheet({
         cancelled = true;
       };
     }
-  }, [visible, initialStream, playerUrl, applyPayload]);
+  }, [visible, initialStream, playerUrl, applyPayload, season, episode]);
 
-  const doEnqueue = async () => {
-    // startDownload / duplicate-other confirm only call this when tracks are selected.
-    const audio = selected!;
-    const subtitle = selectedSubtitle!;
-    const hlsUrl = audio.quality[quality] ?? audio.quality[Object.keys(audio.quality)[0]];
-    if (!hlsUrl) {
-      setError(t('downloadSheet.qualityUnavailable'));
+  const doEnqueue = async (force?: boolean, mode: 'single' | 'season' = 'single') => {
+    if (!selected || !selectedSubtitle) {
+      setError(t('downloadSheet.noTracks'));
       return;
     }
     setStarting(true);
     try {
-      await enqueue({
-        movieId,
-        title,
-        posterUrl,
-        playerUrl,
-        audioLabel: audio.label,
-        quality,
-        subtitleLabel: subtitle.label,
-        hlsUrl: pickPrimaryMediaUrl(hlsUrl),
-        subtitleUrl: subtitle.src,
-        audioPlaylistUrl: audio.audioId,
-        season,
-        episode,
-      });
+      const targets =
+        mode === 'season'
+          ? missingSeason.map((ep) => {
+              const audio = sources.find(
+                (s) => s.season === ep.season && s.episode === ep.episode
+              )!;
+              return { audio, epSeason: ep.season, epEpisode: ep.episode };
+            })
+          : [
+              {
+                audio: selected,
+                epSeason: season ?? selected.season,
+                epEpisode: episode ?? selected.episode,
+              },
+            ];
+      for (const target of targets) {
+        const hlsUrl =
+          target.audio.quality[quality] ??
+          target.audio.quality[Object.keys(target.audio.quality)[0]];
+        if (!hlsUrl) {
+          setError(t('downloadSheet.qualityUnavailable'));
+          return;
+        }
+        const baseMovieId = movieId.replace(/_s\d+_e\d+$/i, '');
+        const epSeason = target.epSeason;
+        const epEpisode = target.epEpisode;
+        const enqueueMovieId =
+          epSeason != null && epEpisode != null
+            ? `${baseMovieId}_s${epSeason}_e${epEpisode}`
+            : movieId;
+        const request = {
+          movieId: enqueueMovieId,
+          title,
+          posterUrl,
+          playerUrl,
+          audioLabel: target.audio.label,
+          quality,
+          subtitleLabel: selectedSubtitle.label,
+          hlsUrl: pickPrimaryMediaUrl(hlsUrl),
+          subtitleUrl: selectedSubtitle.src,
+          audioPlaylistUrl: target.audio.audioId,
+          mediaKind: (payload?.progressive ? 'progressive' : 'hls') as 'hls' | 'progressive',
+          season: epSeason,
+          episode: epEpisode,
+          skipTimeSec: parseSkipTimeSec(payload?.skipTime),
+          removeTimeSec: parseRemoveTimeSec(payload?.removeTime),
+        };
+        if (force) await enqueue(request, { force: true });
+        else await enqueue(request);
+      }
       onClose();
     } catch (e) {
-      setError(errorMessage(e, t('downloadSheet.startFailed')));
+      if (isDownloadGateError(e)) {
+        setGateMode(mode);
+        setGate(e.code);
+      } else {
+        setError(errorMessage(e, t('downloadSheet.startFailed')));
+      }
     } finally {
       setStarting(false);
     }
@@ -189,6 +256,10 @@ export function DownloadSheet({
       return;
     }
     void doEnqueue();
+  };
+
+  const startSeasonDownload = () => {
+    void doEnqueue(undefined, 'season');
   };
 
   if (!visible) return null;
@@ -311,6 +382,28 @@ export function DownloadSheet({
             {Number(quality) >= 1080 ? (
               <Text style={styles.warn}>{t('downloadSheet.highQualityWarn')}</Text>
             ) : null}
+            {missingSeason.length ? (
+              <>
+                <Text style={styles.warn}>
+                  {t('downloadSheet.seasonMissing', { n: missingSeason.length })}
+                </Text>
+                <Pressable
+                  testID="download-season-all"
+                  style={[sheetStyles.cta, starting && sheetStyles.ctaDisabled]}
+                  disabled={starting}
+                  onPress={startSeasonDownload}
+                >
+                  {starting ? (
+                    <ActivityIndicator color={colors.black} />
+                  ) : (
+                    <>
+                      <Ionicons name="albums-outline" size={20} color={colors.black} />
+                      <Text style={sheetStyles.ctaText}>{t('downloadSheet.seasonAll')}</Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
+            ) : null}
 
             <Pressable
               style={[sheetStyles.cta, starting && sheetStyles.ctaDisabled]}
@@ -388,6 +481,19 @@ export function DownloadSheet({
           setDupDialog(null);
           setDupExisting(null);
         }}
+      />
+
+      <ConfirmDialog
+        visible={gate != null}
+        title={gate === 'wifi' ? t('downloadSheet.wifiTitle') : t('downloadSheet.storageTitle')}
+        message={gate === 'wifi' ? t('downloads.wifiBlocked') : t('downloads.storageBlocked')}
+        confirmLabel={t('downloads.downloadAnyway')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={() => {
+          setGate(null);
+          void doEnqueue(true, gateMode);
+        }}
+        onCancel={() => setGate(null)}
       />
     </View>
   );

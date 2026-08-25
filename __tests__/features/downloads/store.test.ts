@@ -27,6 +27,7 @@ jest.mock('@/src/features/downloads/mediaFetch', () => ({
 
 jest.mock('@/src/features/downloads/progressive', () => ({
   downloadProgressiveFile: jest.fn(async () => 'file:///mock-docs/downloads/yt/video.mp4'),
+  progressiveMediaHeaders: jest.fn(() => ({ Referer: 'https://www.incvideo1.online/' })),
 }));
 
 jest.mock('@/src/features/downloads/youtube', () => ({
@@ -35,8 +36,20 @@ jest.mock('@/src/features/downloads/youtube', () => ({
 }));
 
 jest.mock('@/src/data/catalog/embedStreams', () => ({
-  isEmbessPlayerUrl: (url: string) => /embess\.ws/i.test(url),
+  isEmbessPlayerUrl: (url: string) => /embess\.ws|namy\.ws|domem\.ws/i.test(url),
+  isFsstPlayerUrl: (url: string) => /fsst\.online|incvideo/i.test(url),
+  isProgressiveMediaUrl: (url: string) => /\.mp4/i.test(url),
+  isResolvableEmbedUrl: (url: string) => /embess\.ws|namy\.ws|domem\.ws|fsst\.online|incvideo/i.test(url),
+  resolveEmbedStream: jest.fn(async () => null),
 }));
+
+jest.mock('@/src/features/downloads/storage', () => {
+  const actual = jest.requireActual('@/src/features/downloads/storage') as typeof import('@/src/features/downloads/storage');
+  return {
+    ...actual,
+    computePathUsage: jest.fn(actual.computePathUsage),
+  };
+});
 
 import {
   deleteDownloadRow,
@@ -57,8 +70,10 @@ import {
 import { downloadProgressiveFile } from '@/src/features/downloads/progressive';
 import { withMediaFetchPlayer } from '@/src/features/downloads/mediaFetch';
 import { useDownloadsStore } from '@/src/features/downloads/store';
+import { computePathUsage } from '@/src/features/downloads/storage';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { resolveYoutubeStream } from '@/src/features/downloads/youtube';
+import { resolveEmbedStream } from '@/src/data/catalog/embedStreams';
 import { t } from '@/src/shared/i18n';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -207,6 +222,30 @@ describe('downloads store enqueue / retry', () => {
     expect(completed?.progress).toBe(1);
   });
 
+  it('completes when path usage throws', async () => {
+    (computePathUsage as jest.Mock).mockRejectedValueOnce(new Error('stat fail'));
+    (getDownload as jest.Mock).mockImplementation(async (id: string) => {
+      const item = useDownloadsStore.getState().items.find((i) => i.id === id);
+      return item ?? baseRecord({ id, status: 'queued' });
+    });
+
+    const id = await useDownloadsStore.getState().enqueue({
+      movieId: 'size-throw',
+      title: 'Film',
+      playerUrl: 'https://player',
+      audioLabel: 'RU',
+      quality: '720',
+      subtitleLabel: 'Subs',
+      hlsUrl: 'https://hls',
+      subtitleUrl: 'https://subs',
+    });
+    await flushJobs();
+    await flushJobs();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(useDownloadsStore.getState().items.find((i) => i.id === id)?.status).toBe('completed');
+    expect(useDownloadsStore.getState().items.find((i) => i.id === id)?.sizeBytes).toBeUndefined();
+  });
+
   it('enqueue fails job on download error', async () => {
     (downloadHlsToDirectory as jest.Mock).mockRejectedValueOnce(new Error('cdn 403'));
     (getDownload as jest.Mock).mockImplementation(async (id: string) => {
@@ -316,6 +355,136 @@ describe('downloads store enqueue / retry', () => {
     const updated = useDownloadsStore.getState().items.find((i) => i.id === 'm1');
     expect(updated?.status).toBe('resolving');
     expect(updated?.playerUrl).toContain('_nd=');
+  });
+
+  it('retry embess/fsst rematches via resolveEmbedStream', async () => {
+    const item = baseRecord({
+      id: 'm-fsst',
+      status: 'failed',
+      playerUrl: 'https://fsst.online/embed/1',
+      audioLabel: 'Default',
+      subtitleLabel: '—',
+      quality: '360',
+      videoDir: 'file:///mock-docs/downloads/m-fsst/',
+    });
+    (getDownload as jest.Mock).mockResolvedValue(item);
+    (resolveEmbedStream as jest.Mock).mockResolvedValue({
+      progressive: true,
+      hlsSource: [{ label: 'Default', quality: { '360': 'https://cdn/v.mp4' } }],
+      tracks: [{ kind: 'captions', label: '—', src: '' }],
+    });
+    await useDownloadsStore.getState().retry('m-fsst');
+    await new Promise((r) => setTimeout(r, 40));
+    expect(resolveEmbedStream).toHaveBeenCalledWith('https://fsst.online/embed/1', {
+      season: undefined,
+      episode: undefined,
+    });
+    expect(downloadProgressiveFile).toHaveBeenCalled();
+  });
+
+  it('enqueue progressive movie downloads via downloadProgressiveFile', async () => {
+    (getDownload as jest.Mock).mockImplementation(async (id: string) =>
+      useDownloadsStore.getState().items.find((i) => i.id === id) ?? null
+    );
+    (downloadProgressiveFile as jest.Mock).mockImplementation(
+      async (_u: string, dest: string, onProgress?: (p: number) => void) => {
+        onProgress?.(0.5);
+        return dest;
+      }
+    );
+    await useDownloadsStore.getState().enqueue({
+      movieId: '7739',
+      title: 'Kitchen',
+      playerUrl: 'https://fsst.online/playlist_iframe/1/',
+      audioLabel: 'Кухня 2-1',
+      quality: '360',
+      subtitleLabel: '—',
+      hlsUrl: 'https://cdn/ep.mp4',
+      subtitleUrl: '',
+      mediaKind: 'progressive',
+      season: 2,
+      episode: 1,
+    });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(downloadProgressiveFile).toHaveBeenCalled();
+    expect(withMediaFetchPlayer).not.toHaveBeenCalled();
+    const item = useDownloadsStore.getState().items[0];
+    expect(item?.mediaKind).toBe('progressive');
+    expect(item?.status).toBe('completed');
+  });
+
+  it('infers progressive mediaKind from mp4 URL without explicit kind', async () => {
+    (getDownload as jest.Mock).mockImplementation(async (id: string) =>
+      useDownloadsStore.getState().items.find((i) => i.id === id) ?? null
+    );
+    await useDownloadsStore.getState().enqueue({
+      movieId: 'p1',
+      title: 'Prog',
+      playerUrl: 'https://fsst.online/embed/1',
+      audioLabel: 'Default',
+      quality: '360',
+      subtitleLabel: '—',
+      hlsUrl: 'https://cdn/v.mp4',
+      subtitleUrl: '',
+    });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(useDownloadsStore.getState().items[0]?.mediaKind).toBe('progressive');
+    expect(downloadProgressiveFile).toHaveBeenCalled();
+  });
+
+  it('movie progressive aborts after file download when removed', async () => {
+    (listDownloads as jest.Mock).mockResolvedValue([]);
+    (getDownload as jest.Mock).mockImplementation(async (id: string) =>
+      useDownloadsStore.getState().items.find((i) => i.id === id) ?? null
+    );
+    (downloadProgressiveFile as jest.Mock).mockImplementation(
+      async (_u: string, dest: string, onProgress?: (p: number) => void) => {
+        onProgress?.(0.2);
+        const id = useDownloadsStore.getState().activeId;
+        if (id) await useDownloadsStore.getState().remove(id);
+        onProgress?.(0.8);
+        return dest;
+      }
+    );
+    await useDownloadsStore.getState().enqueue({
+      movieId: 'abort-p',
+      title: 'Abort',
+      playerUrl: 'https://fsst.online/embed/1',
+      audioLabel: 'Default',
+      quality: '360',
+      subtitleLabel: '—',
+      hlsUrl: 'https://cdn/v.mp4',
+      subtitleUrl: '',
+      mediaKind: 'progressive',
+    });
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('retry embess throws when resolveEmbedStream returns no streams', async () => {
+    const item = baseRecord({
+      id: 'm-empty-embed',
+      status: 'failed',
+      playerUrl: 'https://api.embess.ws/embed/1',
+    });
+    (getDownload as jest.Mock).mockResolvedValue(item);
+    (resolveEmbedStream as jest.Mock).mockResolvedValue(null);
+    await expect(useDownloadsStore.getState().retry('m-empty-embed')).rejects.toThrow(
+      t('store.retryNoStreams')
+    );
+  });
+
+  it('retry movie keeps progressive mediaKind while resolving', async () => {
+    const item = baseRecord({
+      id: 'm-prog-resolve',
+      status: 'failed',
+      playerUrl: 'https://player?foo=1',
+      mediaKind: 'progressive',
+    });
+    (getDownload as jest.Mock).mockResolvedValue(item);
+    await useDownloadsStore.getState().retry('m-prog-resolve');
+    const updated = useDownloadsStore.getState().items.find((i) => i.id === 'm-prog-resolve');
+    expect(updated?.status).toBe('resolving');
+    expect(updated?.mediaKind).toBe('progressive');
   });
 
   it('retry throws when missing', async () => {

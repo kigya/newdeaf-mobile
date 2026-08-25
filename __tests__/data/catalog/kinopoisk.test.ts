@@ -15,7 +15,10 @@ function loadKp(configured = true) {
     searchMovies: jest.fn(async () => []),
   }));
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('@/src/data/catalog/kinopoisk') as typeof import('@/src/data/catalog/kinopoisk');
+  const client = require('@/src/data/catalog/kinopoisk/client') as typeof import('@/src/data/catalog/kinopoisk/client');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const enrich = require('@/src/data/catalog/kinopoisk/enrich') as typeof import('@/src/data/catalog/kinopoisk/enrich');
+  return { ...client, ...enrich };
 }
 
 function searchJson(films: unknown[]) {

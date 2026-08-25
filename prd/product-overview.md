@@ -1,8 +1,8 @@
 # NewDeaf — product overview
 
 - **Status:** implemented (baseline)
-- **Last updated:** 2026-08-01
-- **Platform:** Android-first Expo / React Native app (`top.newdeaf.app`), version `1.0.0`
+- **Last updated:** 2026-08-25
+- **Platform:** Android-first Expo / React Native app (`top.newdeaf.app`), version `1.1.0`
 
 ## Idea
 
@@ -15,16 +15,17 @@ NewDeaf is a native mobile client for [newdeaf.top](https://newdeaf.top). Users 
 
 ## Current capabilities
 
-- New-releases catalog with pull-to-refresh and infinite pagination
+- New-releases catalog with curated discovery rails, “I’m feeling lucky”, pull-to-refresh and infinite pagination
 - Continue Watching rail (online + offline-aware)
 - Search (min 4 characters; EN→RU title bridge via TMDB when needed)
 - Genre browsing (hidden tab + genre list screens)
-- Movie details (scrape + optional TMDB localization + Kinopoisk enrichment)
+- Movie details encyclopedia (scrape + optional TMDB localization + Kinopoisk facts/stills/reviews/sequels)
+- In-app YouTube trailer modal with one-tap trailer download
 - Online playback via embedded site player (WebView)
 - Download selected quality + audio + subtitles (HLS / progressive); YouTube download path
-- Offline playback with local VTT subtitles
-- Favorites and watch progress persisted in SQLite
-- Settings: language (ru/en), default download quality, app version footer, Made by kigya attribution
+- Offline playback with local VTT subtitles and skip-intro (bnsi markers + manual skip point)
+- Library: favorites, queue, rewatch, watch history, local stats
+- Settings: language (ru/en), default download quality, Wi-Fi-only downloads, storage cap, app version footer, Made by kigya attribution
 - Tablet-friendly layout via `useBreakpoint` / window dimensions
 
 ## Product boundaries
@@ -41,14 +42,16 @@ NewDeaf is a native mobile client for [newdeaf.top](https://newdeaf.top). Users 
 | Area | Doc |
 |------|-----|
 | Catalog, search, genres | [`features/catalog-and-search.md`](features/catalog-and-search.md) |
+| Discovery rails | [`features/discovery-rails.md`](features/discovery-rails.md) |
 | Details & online player | [`features/movie-details-and-player.md`](features/movie-details-and-player.md) |
 | Downloads & offline | [`features/downloads-and-offline.md`](features/downloads-and-offline.md) |
 | Favorites & progress | [`features/favorites-and-progress.md`](features/favorites-and-progress.md) |
+| Library & stats | [`features/library-and-stats.md`](features/library-and-stats.md) |
 | Settings | [`features/settings.md`](features/settings.md) |
 
 ## Screen PRDs
 
-Detailed per-route behavior lives under [`screens/`](screens/). Cross-cutting rules: [`behavior/cross-cutting.md`](behavior/cross-cutting.md).
+Detailed per-route behavior lives under [`screens/`](screens/), including [`screens/trailer.md`](screens/trailer.md). Cross-cutting rules: [`behavior/cross-cutting.md`](behavior/cross-cutting.md).
 
 ## APIs & integrations
 

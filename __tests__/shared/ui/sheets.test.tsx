@@ -2,12 +2,13 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Keyboard, Platform } from 'react-native';
 
+import { DownloadGateError } from '@/src/features/downloads/errors';
 import { DownloadSheet } from '@/src/shared/ui/DownloadSheet';
 import { YoutubeDownloadSheet } from '@/src/shared/ui/YoutubeDownloadSheet';
 import { t } from '@/src/shared/i18n';
 
-const mockEnqueue = jest.fn(async () => undefined);
-const mockEnqueueYoutube = jest.fn(async () => undefined);
+const mockEnqueue = jest.fn(async () => undefined) as jest.Mock;
+const mockEnqueueYoutube = jest.fn(async () => undefined) as jest.Mock;
 let mockDownloadItems: unknown[] = [];
 
 jest.mock('@/src/features/downloads/store', () => ({
@@ -138,6 +139,31 @@ jest.mock('@/src/features/playback/StreamResolver', () => ({
       ),
       ReactLocal.createElement(
         P,
+        {
+          testID: 'sheet-resolve-season',
+          onPress: () =>
+            onResolved({
+              hlsSource: [
+                {
+                  label: 'Ep1',
+                  quality: { '720': 'https://cdn/e1.m3u8' },
+                  season: 1,
+                  episode: 1,
+                },
+                {
+                  label: 'Ep2',
+                  quality: { '720': 'https://cdn/e2.m3u8' },
+                  season: 1,
+                  episode: 2,
+                },
+              ],
+              tracks: [],
+            }),
+        },
+        ReactLocal.createElement(Text, null, 'season')
+      ),
+      ReactLocal.createElement(
+        P,
         { testID: 'sheet-resolve-err', onPress: () => onError('bad') },
         ReactLocal.createElement(Text, null, 'err')
       )
@@ -208,6 +234,48 @@ describe('DownloadSheet', () => {
     await fireEvent.press(screen.getByText(t('common.download')));
     await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('offers download anyway after a wifi gate', async () => {
+    mockEnqueue
+      .mockRejectedValueOnce(new DownloadGateError('wifi', 'blocked'))
+      .mockResolvedValueOnce('id-1');
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(screen.getByText(t('downloadSheet.wifiTitle'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('downloads.downloadAnyway')));
+    await waitFor(() =>
+      expect(mockEnqueue).toHaveBeenLastCalledWith(expect.any(Object), { force: true })
+    );
+  });
+
+  it('cancels a storage gate dialog', async () => {
+    mockEnqueue.mockRejectedValueOnce(new DownloadGateError('storage', 'full'));
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Film"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve'));
+    await waitFor(() => expect(screen.getByText(t('common.download'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(screen.getByText(t('downloadSheet.storageTitle'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+    expect(screen.queryByText(t('downloadSheet.storageTitle'))).toBeNull();
   });
 
   it('shows empty streams error', async () => {
@@ -529,15 +597,155 @@ describe('DownloadSheet', () => {
       />
     );
     await waitFor(() => expect(screen.getByText('MovieDalen')).toBeTruthy());
-    expect(screen.queryByTestId('sheet-resolve')).toBeNull();
     await fireEvent.press(screen.getByText(t('common.download')));
-    await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          audioPlaylistUrl: 'https://cdn/a1.m3u8',
-          audioLabel: 'MovieDalen',
-        })
-      )
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioPlaylistUrl: 'https://cdn/a1.m3u8',
+      })
+    );
+  });
+
+  it('preselects Eng.Original over dubs', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Eng.Original')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioLabel: 'Eng.Original',
+        audioPlaylistUrl: 'https://cdn/a7.m3u8',
+      })
+    );
+  });
+
+  it('pins download audio via initialAudioLabel', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+        initialAudioLabel="HDRezka Studio"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('HDRezka Studio')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioLabel: 'HDRezka Studio',
+        audioPlaylistUrl: 'https://cdn/a1.m3u8',
+      })
+    );
+  });
+
+  it('ignores unknown initialAudioLabel and keeps original', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+        initialAudioLabel="Missing"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Eng.Original')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ audioLabel: 'Eng.Original' })
+    );
+  });
+
+  it('enqueues progressive playlist episode with mediaKind and s/e movieId', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="7739"
+        title="Kitchen"
+        playerUrl="https://fsst.online/playlist_iframe/17980/"
+        initialStream={{
+          progressive: true,
+          hlsSource: [
+            {
+              label: 'Кухня 2-1',
+              quality: { '360': 'https://cdn/e1_360.mp4' },
+              season: 2,
+              episode: 1,
+            },
+          ],
+          tracks: [{ kind: 'captions', label: '—', src: '' }],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Кухня 2-1')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        movieId: '7739_s2_e1',
+        mediaKind: 'progressive',
+        season: 2,
+        episode: 1,
+        hlsUrl: 'https://cdn/e1_360.mp4',
+      })
     );
   });
 
@@ -610,6 +818,154 @@ describe('DownloadSheet', () => {
       />
     );
     await waitFor(() => expect(screen.getByText('Рус. полные')).toBeTruthy());
+  });
+
+  it('warns when other season episodes are missing', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1_s1_e1"
+        title="Show"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-season'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.seasonMissing', { n: 2 }))).toBeTruthy()
+    );
+  });
+
+  it('enqueues missing season episodes from the season CTA', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1_s1_e1"
+        title="Show"
+        playerUrl="https://player"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'Ep1',
+              quality: { '720': 'https://cdn/e1.m3u8' },
+              season: 1,
+              episode: 1,
+            },
+            {
+              label: 'Ep2',
+              quality: { '720': 'https://cdn/e2.m3u8' },
+              season: 1,
+              episode: 2,
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'RU', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await fireEvent.press(screen.getByTestId('download-season-all'));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalledTimes(2));
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ movieId: 'm1_s1_e1', season: 1, episode: 1 })
+    );
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ movieId: 'm1_s1_e2', season: 1, episode: 2, hlsUrl: 'https://cdn/e2.m3u8' })
+    );
+  });
+
+  it('season CTA shows noTracks when captions are missing', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Show"
+        playerUrl="https://player"
+      />
+    );
+    await fireEvent.press(screen.getByTestId('sheet-resolve-season'));
+    await waitFor(() => expect(screen.getByTestId('download-season-all')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('download-season-all'));
+    expect(screen.getByText(t('downloadSheet.noTracks'))).toBeTruthy();
+  });
+
+  it('retries season enqueue with force after a wifi gate', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Show"
+        playerUrl="https://player"
+        initialStream={{
+          hlsSource: [
+            { label: 'Ep1', quality: { '720': 'https://cdn/e1.m3u8' }, season: 1, episode: 1 },
+            { label: 'Ep2', quality: { '720': 'https://cdn/e2.m3u8' }, season: 1, episode: 2 },
+          ],
+          tracks: [{ kind: 'captions', label: 'RU', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    mockEnqueue.mockRejectedValueOnce(new DownloadGateError('wifi', 'blocked'));
+    await fireEvent.press(screen.getByTestId('download-season-all'));
+    await waitFor(() => expect(screen.getByText(t('downloadSheet.wifiTitle'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('downloads.downloadAnyway')));
+    await waitFor(() =>
+      expect(mockEnqueue).toHaveBeenCalledWith(expect.anything(), { force: true })
+    );
+  });
+
+  it('stops season enqueue when an episode has no quality url', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Show"
+        playerUrl="https://player"
+        initialStream={{
+          hlsSource: [
+            { label: 'Ep1', quality: { '720': 'https://cdn/e1.m3u8' }, season: 1, episode: 1 },
+            { label: 'Ep2', quality: {}, season: 1, episode: 2 },
+          ],
+          tracks: [{ kind: 'captions', label: 'RU', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await fireEvent.press(screen.getByTestId('download-season-all'));
+    await waitFor(() =>
+      expect(screen.getByText(t('downloadSheet.qualityUnavailable'))).toBeTruthy()
+    );
+  });
+
+  it('shows a spinner on the season CTA while enqueue is pending', async () => {
+    let resolveEnqueue: () => void = () => undefined;
+    mockEnqueue.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveEnqueue = () => resolve(undefined);
+        })
+    );
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="m1"
+        title="Show"
+        playerUrl="https://player"
+        initialStream={{
+          hlsSource: [
+            { label: 'Ep1', quality: { '720': 'https://cdn/e1.m3u8' }, season: 1, episode: 1 },
+            { label: 'Ep2', quality: { '720': 'https://cdn/e2.m3u8' }, season: 1, episode: 2 },
+          ],
+          tracks: [{ kind: 'captions', label: 'RU', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await fireEvent.press(screen.getByTestId('download-season-all'));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    resolveEnqueue();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });
 
@@ -851,5 +1207,43 @@ describe('YoutubeDownloadSheet', () => {
     const input = screen.getByPlaceholderText(t('youtube.placeholder'));
     await fireEvent(input, 'submitEditing');
     expect(mockProbeYoutubeQualities).not.toHaveBeenCalled();
+  });
+
+  it('offers download anyway after a youtube wifi gate', async () => {
+    mockEnqueueYoutube
+      .mockRejectedValueOnce(new DownloadGateError('wifi', 'blocked'))
+      .mockResolvedValueOnce('yt-1');
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText(t('youtube.cta'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('youtube.cta')));
+    await waitFor(() => expect(screen.getByText(t('downloadSheet.wifiTitle'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('downloads.downloadAnyway')));
+    await waitFor(() =>
+      expect(mockEnqueueYoutube).toHaveBeenLastCalledWith(
+        'https://youtu.be/abc12345678',
+        '720',
+        { force: true }
+      )
+    );
+  });
+
+  it('cancels a youtube wifi gate dialog', async () => {
+    mockEnqueueYoutube.mockRejectedValueOnce(new DownloadGateError('wifi', 'blocked'));
+    await render(<YoutubeDownloadSheet visible onClose={onClose} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(t('youtube.placeholder')),
+      'https://youtu.be/abc12345678'
+    );
+    await fireEvent.press(screen.getByText(t('youtube.chooseQuality')));
+    await waitFor(() => expect(screen.getByText(t('youtube.cta'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('youtube.cta')));
+    await waitFor(() => expect(screen.getByText(t('downloadSheet.wifiTitle'))).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.cancel')));
+    expect(screen.queryByText(t('downloadSheet.wifiTitle'))).toBeNull();
   });
 });

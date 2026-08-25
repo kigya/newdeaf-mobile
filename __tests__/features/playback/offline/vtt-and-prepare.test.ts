@@ -178,4 +178,67 @@ describe('prepareLocalPlaybackUri', () => {
     const written = writeAsStringAsync.mock.calls[0][1] as string;
     expect(written).toContain('noslash/seg.ts');
   });
+
+  it('rewrites demux master EXT-X-MEDIA and nested video/audio playlists', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockImplementation(async (uri: string) => {
+      if (String(uri).includes('video.m3u8') && !String(uri).includes('absolute')) {
+        return ['#EXTM3U', '#EXTINF:1,', 'v_00001.ts'].join('\n');
+      }
+      if (String(uri).includes('audio.m3u8') && !String(uri).includes('absolute')) {
+        return ['#EXTM3U', '#EXTINF:1,', 'a_00001.ts'].join('\n');
+      }
+      return [
+        '#EXTM3U',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="LostFilm",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"',
+        '#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720,AUDIO="aud"',
+        'video.m3u8',
+      ].join('\n');
+    });
+
+    const out = await prepareLocalPlaybackUri('file:///data/demux/index.m3u8', 'hls');
+    expect(out).toBe('file:///data/demux/index.absolute.m3u8');
+
+    const writtenByPath = Object.fromEntries(
+      writeAsStringAsync.mock.calls.map(([path, body]) => [String(path), String(body)])
+    );
+    expect(writtenByPath['file:///data/demux/video.absolute.m3u8']).toContain(
+      'file:///data/demux/v_00001.ts'
+    );
+    expect(writtenByPath['file:///data/demux/audio.absolute.m3u8']).toContain(
+      'file:///data/demux/a_00001.ts'
+    );
+    const master = writtenByPath['file:///data/demux/index.absolute.m3u8'];
+    expect(master).toContain('URI="file:///data/demux/audio.absolute.m3u8"');
+    expect(master).toContain('file:///data/demux/video.absolute.m3u8');
+    expect(master).toContain('#EXT-X-ENDLIST');
+  });
+
+  it('keeps already-absolute playlist names and stops deep recursion', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    let reads = 0;
+    readAsStringAsync.mockImplementation(async (uri: string) => {
+      reads += 1;
+      if (String(uri).includes('child.absolute.m3u8')) {
+        return ['#EXTM3U', '#EXTINF:1,', 'seg.ts'].join('\n');
+      }
+      return [
+        '#EXTM3U',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="A",URI="nested.m3u8"',
+        'nested.m3u8',
+        'child.absolute.m3u8',
+      ].join('\n');
+    });
+    await prepareLocalPlaybackUri('file:///data/deep/index.m3u8', 'hls');
+    expect(reads).toBeGreaterThan(1);
+    const paths = writeAsStringAsync.mock.calls.map((c) => String(c[0]));
+    expect(paths.some((p) => p.includes('.absolute.m3u8'))).toBe(true);
+  });
+
+  it('defaults leaf name when playlist URI has empty path segment', async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    readAsStringAsync.mockResolvedValue('#EXTM3U\n#EXTINF:1,\nseg.ts\n');
+    const out = await prepareLocalPlaybackUri('file:///', 'hls');
+    expect(out).toBe('file:///index.absolute.m3u8');
+  });
 });

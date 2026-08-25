@@ -1,19 +1,21 @@
 # Screen: Catalog
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Route:** `/(tabs)` / `/(tabs)/index`
 - **Related code:** `app/(tabs)/index.tsx` → `src/screens/catalog/`, `MovieGrid`, `ContinueWatchingRail`, `GenresBanner`, `fetchHomeMovies`
 
 ## Purpose
 
-Home catalog of new releases from newdeaf.top, plus Continue Watching and entry to genres.
+Home catalog of new releases from newdeaf.top, curated discovery rails, Continue Watching, and “I’m feeling lucky”.
 
 ## UI sections
 
-1. **Continue Watching rail** — horizontal list from watch-progress store (null if empty)
-2. **Genres banner** — navigates to hidden `/(tabs)/genres`
-3. **Movie grid** — paginated `fetchHomeMovies`
+1. **Lucky** — random catalog title
+2. **Continue Watching rail** — horizontal list from watch-progress store (null if empty)
+3. **Discovery rails** — site popular, because you watched, KP Top 250, premieres, TMDB trending, Fantastic, Series (hidden if &lt;3 items)
+4. **Genres banner** — navigates to hidden `/(tabs)/genres`
+5. **Новинки grid** — paginated `fetchHomeMovies`
 
 ## Actions
 
@@ -37,6 +39,7 @@ Home catalog of new releases from newdeaf.top, plus Continue Watching and entry 
 | Error | Red banner above grid; prior data may remain on refresh fail |
 | Append returns 0 new | `hasMore = false` |
 | Race | Stale responses discarded via `requestIdRef`; duplicate IDs filtered on append |
+| Lucky empty | Red `catalog.luckyEmpty` banner; no navigation |
 
 ## Orientation
 

@@ -29,6 +29,9 @@ const ALL_DOWNLOAD_COLS = [
   'youtubeUrl',
   'season',
   'episode',
+  'skipTimeSec',
+  'removeTimeSec',
+  'sizeBytes',
 ].map((name) => ({ name }));
 
 function createMockDb(tableCols: { name: string }[] = ALL_DOWNLOAD_COLS): MockDb {
@@ -79,6 +82,9 @@ function sampleRow(overrides: Record<string, unknown> = {}): Record<string, unkn
     youtubeUrl: null,
     season: null,
     episode: null,
+    skipTimeSec: null,
+    removeTimeSec: null,
+    sizeBytes: null,
     ...overrides,
   };
 }
@@ -101,6 +107,9 @@ describe('downloads db', () => {
     expect(alters.some((s) => s.includes('youtubeUrl'))).toBe(true);
     expect(alters.some((s) => s.includes('season'))).toBe(true);
     expect(alters.some((s) => s.includes('episode'))).toBe(true);
+    expect(alters.some((s) => s.includes('skipTimeSec'))).toBe(true);
+    expect(alters.some((s) => s.includes('removeTimeSec'))).toBe(true);
+    expect(alters.some((s) => s.includes('sizeBytes'))).toBe(true);
   });
 
   it('listDownloads maps rows and normalizes legacy status', async () => {
@@ -117,6 +126,9 @@ describe('downloads db', () => {
           youtubeUrl: 'https://yt',
           season: 1,
           episode: 2,
+          skipTimeSec: 12,
+          removeTimeSec: 90,
+          sizeBytes: 4096,
           source: '',
           mediaKind: '',
         }),
@@ -151,6 +163,9 @@ describe('downloads db', () => {
     expect(rows[2].youtubeUrl).toBe('https://yt');
     expect(rows[2].season).toBe(1);
     expect(rows[2].episode).toBe(2);
+    expect(rows[2].skipTimeSec).toBe(12);
+    expect(rows[2].removeTimeSec).toBe(90);
+    expect(rows[2].sizeBytes).toBe(4096);
     expect(rows[2].source).toBe('movie');
     expect(rows[2].mediaKind).toBe('hls');
     expect(rows[3].status).toBe('failed');
@@ -195,8 +210,11 @@ describe('downloads db', () => {
     });
     expect(mockDb.runAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO downloads'),
-      expect.arrayContaining(['x', '1', 'T', null, 'a', '720'])
+      expect.arrayContaining(['x', '1', 'T', null, 'a', '720', '', 'queued', 0, null])
     );
+    const binds = mockDb.runAsync.mock.calls[0][1] as unknown[];
+    expect(binds).toHaveLength(26);
+    expect(binds.slice(-3)).toEqual([null, null, null]);
   });
 
   it('deleteDownloadRow deletes by id', async () => {
