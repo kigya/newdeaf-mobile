@@ -42,3 +42,6 @@ yarn-error.*
 /android
 
 coverage/
+
+# agent orchestration scratch (not product)
+.agent/
