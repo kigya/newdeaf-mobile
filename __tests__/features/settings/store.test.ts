@@ -23,6 +23,8 @@ describe('settings store', () => {
       locale: 'en',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
       hydrated: false,
     });
     (readSystemLocale as jest.Mock).mockReturnValue('en');
@@ -33,6 +35,8 @@ describe('settings store', () => {
       locale: 'ru',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '1080',
+      downloadsWifiOnly: true,
+      storageCapMb: 2048,
     });
     await useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().locale).toBe('ru');
@@ -56,6 +60,8 @@ describe('settings store', () => {
       locale: 'en',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
       hydrated: true,
     });
     await useSettingsStore.getState().setLocale('ru');
@@ -71,6 +77,8 @@ describe('settings store', () => {
       locale: 'ru',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
       hydrated: true,
     });
     (readSystemLocale as jest.Mock).mockReturnValue('en');
@@ -83,6 +91,8 @@ describe('settings store', () => {
       locale: 'ru',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
       hydrated: true,
     });
     (readSystemLocale as jest.Mock).mockReturnValue('ru');
@@ -103,6 +113,8 @@ describe('settings store', () => {
       locale: 'en',
       lastSeenSystemLocale: 'en',
       preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
       hydrated: true,
     });
     await useSettingsStore.getState().setPreferredDownloadQuality('best');
@@ -110,5 +122,24 @@ describe('settings store', () => {
     expect(saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ preferredDownloadQuality: 'best' })
     );
+  });
+
+  it('setDownloadsWifiOnly and setStorageCapMb persist', async () => {
+    useSettingsStore.setState({
+      locale: 'en',
+      lastSeenSystemLocale: 'en',
+      preferredDownloadQuality: '720',
+      downloadsWifiOnly: false,
+      storageCapMb: 0,
+      hydrated: true,
+    });
+    await useSettingsStore.getState().setDownloadsWifiOnly(true);
+    expect(useSettingsStore.getState().downloadsWifiOnly).toBe(true);
+    expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ downloadsWifiOnly: true }));
+
+    await useSettingsStore.getState().setStorageCapMb(2048.9);
+    expect(useSettingsStore.getState().storageCapMb).toBe(2048);
+    await useSettingsStore.getState().setStorageCapMb(-1);
+    expect(useSettingsStore.getState().storageCapMb).toBe(0);
   });
 });

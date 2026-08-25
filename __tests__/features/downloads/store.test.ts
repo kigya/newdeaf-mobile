@@ -43,6 +43,14 @@ jest.mock('@/src/data/catalog/embedStreams', () => ({
   resolveEmbedStream: jest.fn(async () => null),
 }));
 
+jest.mock('@/src/features/downloads/storage', () => {
+  const actual = jest.requireActual('@/src/features/downloads/storage') as typeof import('@/src/features/downloads/storage');
+  return {
+    ...actual,
+    computePathUsage: jest.fn(actual.computePathUsage),
+  };
+});
+
 import {
   deleteDownloadRow,
   getDownload,
@@ -62,6 +70,7 @@ import {
 import { downloadProgressiveFile } from '@/src/features/downloads/progressive';
 import { withMediaFetchPlayer } from '@/src/features/downloads/mediaFetch';
 import { useDownloadsStore } from '@/src/features/downloads/store';
+import { computePathUsage } from '@/src/features/downloads/storage';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { resolveYoutubeStream } from '@/src/features/downloads/youtube';
 import { resolveEmbedStream } from '@/src/data/catalog/embedStreams';
@@ -211,6 +220,30 @@ describe('downloads store enqueue / retry', () => {
     const completed = useDownloadsStore.getState().items.find((i) => i.id === id);
     expect(completed?.status).toBe('completed');
     expect(completed?.progress).toBe(1);
+  });
+
+  it('completes when path usage throws', async () => {
+    (computePathUsage as jest.Mock).mockRejectedValueOnce(new Error('stat fail'));
+    (getDownload as jest.Mock).mockImplementation(async (id: string) => {
+      const item = useDownloadsStore.getState().items.find((i) => i.id === id);
+      return item ?? baseRecord({ id, status: 'queued' });
+    });
+
+    const id = await useDownloadsStore.getState().enqueue({
+      movieId: 'size-throw',
+      title: 'Film',
+      playerUrl: 'https://player',
+      audioLabel: 'RU',
+      quality: '720',
+      subtitleLabel: 'Subs',
+      hlsUrl: 'https://hls',
+      subtitleUrl: 'https://subs',
+    });
+    await flushJobs();
+    await flushJobs();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(useDownloadsStore.getState().items.find((i) => i.id === id)?.status).toBe('completed');
+    expect(useDownloadsStore.getState().items.find((i) => i.id === id)?.sizeBytes).toBeUndefined();
   });
 
   it('enqueue fails job on download error', async () => {
