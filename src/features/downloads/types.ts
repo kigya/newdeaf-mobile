@@ -28,6 +28,13 @@ export type DownloadRecord = {
   youtubeUrl?: string;
   season?: number;
   episode?: number;
+  skipTimeSec?: number;
+  removeTimeSec?: number;
+  sizeBytes?: number;
+};
+
+export type EnqueueOptions = {
+  force?: boolean;
 };
 
 export type DownloadRequest = {
@@ -46,6 +53,8 @@ export type DownloadRequest = {
   mediaKind?: DownloadMediaKind;
   season?: number;
   episode?: number;
+  skipTimeSec?: number;
+  removeTimeSec?: number;
 };
 
 export type YoutubeDownloadRequest = {

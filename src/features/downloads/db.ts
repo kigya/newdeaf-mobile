@@ -28,6 +28,15 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   if (!names.has('episode')) {
     await db.execAsync('ALTER TABLE downloads ADD COLUMN episode INTEGER');
   }
+  if (!names.has('skipTimeSec')) {
+    await db.execAsync('ALTER TABLE downloads ADD COLUMN skipTimeSec REAL');
+  }
+  if (!names.has('removeTimeSec')) {
+    await db.execAsync('ALTER TABLE downloads ADD COLUMN removeTimeSec REAL');
+  }
+  if (!names.has('sizeBytes')) {
+    await db.execAsync('ALTER TABLE downloads ADD COLUMN sizeBytes INTEGER');
+  }
 }
 
 async function getDb() {
@@ -59,7 +68,10 @@ async function getDb() {
           mediaKind TEXT NOT NULL DEFAULT 'hls',
           youtubeUrl TEXT,
           season INTEGER,
-          episode INTEGER
+          episode INTEGER,
+          skipTimeSec REAL,
+          removeTimeSec REAL,
+          sizeBytes INTEGER
         );
       `);
       await migrate(db);
@@ -114,6 +126,9 @@ function rowToRecord(row: Record<string, unknown>): DownloadRecord {
     youtubeUrl: row.youtubeUrl ? String(row.youtubeUrl) : undefined,
     season: row.season != null ? Number(row.season) : undefined,
     episode: row.episode != null ? Number(row.episode) : undefined,
+    skipTimeSec: row.skipTimeSec != null ? Number(row.skipTimeSec) : undefined,
+    removeTimeSec: row.removeTimeSec != null ? Number(row.removeTimeSec) : undefined,
+    sizeBytes: row.sizeBytes != null ? Number(row.sizeBytes) : undefined,
   };
 }
 
@@ -141,8 +156,9 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       id, movieId, title, posterUrl, audioLabel, quality, subtitleLabel,
       status, progress, error, videoDir, playlistPath, subtitlePath,
       createdAt, updatedAt, playerUrl, hlsUrl, subtitleUrl,
-      source, mediaKind, youtubeUrl, season, episode
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      source, mediaKind, youtubeUrl, season, episode,
+      skipTimeSec, removeTimeSec, sizeBytes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,
       posterUrl=excluded.posterUrl,
@@ -163,7 +179,10 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       mediaKind=excluded.mediaKind,
       youtubeUrl=excluded.youtubeUrl,
       season=excluded.season,
-      episode=excluded.episode
+      episode=excluded.episode,
+      skipTimeSec=excluded.skipTimeSec,
+      removeTimeSec=excluded.removeTimeSec,
+      sizeBytes=excluded.sizeBytes
     `,
     [
       record.id,
@@ -189,6 +208,9 @@ export async function upsertDownload(record: DownloadRecord): Promise<void> {
       record.youtubeUrl ?? null,
       record.season ?? null,
       record.episode ?? null,
+      record.skipTimeSec ?? null,
+      record.removeTimeSec ?? null,
+      record.sizeBytes ?? null,
     ]
   );
 }

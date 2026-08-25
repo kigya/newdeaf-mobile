@@ -18,9 +18,19 @@ import {
 import { downloadHlsToDirectory, downloadTextFile, pickPrimaryMediaUrl, pickSubtitleTrack } from './hls';
 import { withMediaFetchPlayer } from './mediaFetch';
 import { downloadProgressiveFile, progressiveMediaHeaders } from './progressive';
-import type { DownloadMediaKind, DownloadRecord, DownloadRequest, YoutubeDownloadRequest } from './types';
+import { DownloadGateError } from './errors';
+import { currentWifiOnlyBlocked } from './network';
+import { computeDownloadsUsage, computePathUsage, isStorageCapBlocked } from './storage';
+import type {
+  DownloadMediaKind,
+  DownloadRecord,
+  DownloadRequest,
+  EnqueueOptions,
+  YoutubeDownloadRequest,
+} from './types';
 import { resolveYoutubeStream } from './youtube';
 import { t } from '@/src/shared/i18n';
+import { useSettingsStore } from '@/src/features/settings/store';
 
 export function inferMovieMediaKind(streamUrl: string, explicit?: DownloadMediaKind): DownloadMediaKind {
   if (explicit === 'progressive' || explicit === 'hls') return explicit;
@@ -32,8 +42,12 @@ type DownloadsState = {
   hydrated: boolean;
   activeId: string | null;
   hydrate: () => Promise<void>;
-  enqueue: (request: DownloadRequest) => Promise<string>;
-  enqueueYoutube: (youtubeUrl: string, preferredQuality?: string) => Promise<string>;
+  enqueue: (request: DownloadRequest, opts?: EnqueueOptions) => Promise<string>;
+  enqueueYoutube: (
+    youtubeUrl: string,
+    preferredQuality?: string,
+    opts?: EnqueueOptions
+  ) => Promise<string>;
   retry: (id: string) => Promise<void>;
   /** Finish movie retry after StreamResolver captured fresh HLS URLs. */
   completeMovieRetry: (id: string, payload: StreamPayload) => Promise<void>;
@@ -77,6 +91,18 @@ function enqueueMovieJob(task: () => Promise<void>): void {
   movieJobChain = movieJobChain.then(task, task).catch((e) => {
     console.warn('[downloads] movie queue error', e);
   });
+}
+
+async function assertDownloadAllowed(force?: boolean): Promise<void> {
+  if (force) return;
+  const { downloadsWifiOnly, storageCapMb } = useSettingsStore.getState();
+  if (await currentWifiOnlyBlocked(downloadsWifiOnly)) {
+    throw new DownloadGateError('wifi', t('downloads.wifiBlocked'));
+  }
+  const used = await computeDownloadsUsage();
+  if (isStorageCapBlocked(used, storageCapMb)) {
+    throw new DownloadGateError('storage', t('downloads.storageBlocked'));
+  }
 }
 
 function makeId(movieId: string, quality: string, audioLabel: string, season?: number, episode?: number) {
@@ -222,6 +248,8 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       mediaKind,
       season: request.season,
       episode: request.episode,
+      skipTimeSec: request.skipTimeSec,
+      removeTimeSec: request.removeTimeSec,
     };
 
     const prior = await getDownload(id);
@@ -329,6 +357,12 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
     const stillExists = await getDownload(id);
     if (!stillExists) return;
 
+    let sizeBytes: number | undefined;
+    try {
+      sizeBytes = await computePathUsage(baseDir);
+    } catch {
+      sizeBytes = undefined;
+    }
     current = {
       ...current,
       status: 'completed',
@@ -341,6 +375,9 @@ async function runDownloadJob(id: string, request: DownloadRequest, existingDir?
       subtitleUrl: request.subtitleUrl,
       source: 'movie',
       mediaKind,
+      skipTimeSec: request.skipTimeSec ?? current.skipTimeSec,
+      removeTimeSec: request.removeTimeSec ?? current.removeTimeSec,
+      sizeBytes,
     };
     await persist(current);
     patchItemInStore(current, null);
@@ -514,7 +551,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     set({ items: await listDownloads() });
   },
 
-  enqueue: async (request) => {
+  enqueue: async (request, opts) => {
+    await assertDownloadAllowed(opts?.force);
     bumpMutation();
     const id = makeId(
       request.movieId,
@@ -544,6 +582,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       mediaKind,
       season: request.season,
       episode: request.episode,
+      skipTimeSec: request.skipTimeSec,
+      removeTimeSec: request.removeTimeSec,
     };
     await persist(record);
     patchItemInStore(record, id);
@@ -552,7 +592,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     return id;
   },
 
-  enqueueYoutube: async (youtubeUrl, preferredQuality) => {
+  enqueueYoutube: async (youtubeUrl, preferredQuality, opts) => {
+    await assertDownloadAllowed(opts?.force);
     bumpMutation();
     const resolved = await resolveYoutubeStream(youtubeUrl, preferredQuality);
     const id = makeYoutubeId(resolved.videoId);
@@ -745,6 +786,8 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       mediaKind,
       season: request.season,
       episode: request.episode,
+      skipTimeSec: request.skipTimeSec ?? item.skipTimeSec,
+      removeTimeSec: request.removeTimeSec ?? item.removeTimeSec,
     };
     await persist(updated);
     patchItemInStore(updated, id);
