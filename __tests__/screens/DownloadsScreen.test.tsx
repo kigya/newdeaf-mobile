@@ -133,7 +133,7 @@ describe('DownloadsScreen', () => {
   });
 
   it('plays completed item and confirms delete', async () => {
-    mockStoreItems = [baseItem()];
+    mockStoreItems = [baseItem({ sizeBytes: 1024 })];
     await render(<DownloadsScreen />);
     await fireEvent.press(screen.getByText('Downloaded Film'));
     expect(mockPush).toHaveBeenCalledWith({

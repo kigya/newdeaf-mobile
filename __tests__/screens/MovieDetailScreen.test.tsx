@@ -169,6 +169,27 @@ jest.mock('@/src/shared/ui/DownloadSheet', () => {
   };
 });
 
+jest.mock('@/src/shared/ui/ListPickerSheet', () => {
+  const ReactLocal = require('react');
+  const { Pressable, Text } = require('react-native');
+  return {
+    ListPickerSheet: ({
+      visible,
+      onClose,
+    }: {
+      visible: boolean;
+      onClose: () => void;
+    }) =>
+      visible
+        ? ReactLocal.createElement(
+            Pressable,
+            { testID: 'list-picker', onPress: onClose },
+            ReactLocal.createElement(Text, null, 'list-picker')
+          )
+        : null,
+  };
+});
+
 jest.mock('@/src/shared/ui/ConfirmDialog', () => {
   const ReactLocal = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -427,6 +448,10 @@ describe('MovieDetailScreen', () => {
     await waitFor(() => expect(screen.getAllByText('Test Movie').length).toBeGreaterThan(0));
     expect(screen.getByText(t('common.watch'))).toBeTruthy();
     expect(screen.getByText(t('common.download'))).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('movie-add-to-list'));
+    await waitFor(() => expect(screen.getByTestId('list-picker')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('list-picker'));
+    await waitFor(() => expect(screen.queryByTestId('list-picker')).toBeNull());
   });
 
   it('shows error state when fetch fails', async () => {
@@ -825,9 +850,8 @@ describe('MovieDetailScreen', () => {
     await render(<MovieDetailScreen />);
     await waitFor(() => expect(screen.getByText(t('movie.watchTrailer'))).toBeTruthy());
     await fireEvent.press(screen.getByText(t('movie.watchTrailer')));
-    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(
-      'https://www.youtube.com/watch?v=abc123XYZ'
-    );
+    expect(mockPush).toHaveBeenCalledWith('/trailer/abc123XYZ');
+    expect(mockOpenBrowserAsync).not.toHaveBeenCalled();
 
     await waitFor(() => expect(screen.getByText('Original')).toBeTruthy());
     expect(screen.getByText('EN')).toBeTruthy();
