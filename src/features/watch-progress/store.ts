@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { useWatchHistoryStore } from '@/src/features/watch-history/store';
 import {
   deleteWatchProgress,
   deleteWatchProgressForEpisode,
@@ -77,7 +78,26 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
 
     const { saveGeneration: _gen, ...persist } = input;
 
-    if (isWatchCompleted(persist)) {
+    const completed = isWatchCompleted(persist);
+    try {
+      await useWatchHistoryStore.getState().record({
+        movieId: persist.movieId,
+        season: persist.season,
+        episode: persist.episode,
+        title: persist.title,
+        posterUrl: persist.posterUrl,
+        href: persist.href,
+        isSeries: persist.isSeries,
+        source: persist.source,
+        positionSec: persist.positionSec,
+        durationSec: persist.durationSec,
+        completed,
+      });
+    } catch {
+      // History is best-effort; progress remains the SSOT for resume.
+    }
+
+    if (completed) {
       await deleteWatchProgress(id);
       const nextGens = { ...get().saveGenerations };
       delete nextGens[id];
