@@ -1,7 +1,7 @@
 # PRD: Favorites and watch progress
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Related code:** `app/(tabs)/favorites.tsx` → `src/screens/favorites/`, `src/features/favorites/`, `src/features/watch-progress/`, Continue Watching on catalog, hydration in `app/_layout.tsx`
 - **Screens:** [`../screens/favorites.md`](../screens/favorites.md), catalog/player screens for progress UX
 
@@ -13,7 +13,8 @@ Users need a local shortlist and resume-where-left-off without an account.
 
 - Add/remove favorites; list on Favorites tab; persist SQLite
 - Record and restore watch progress for online WebView and offline expo-video
-- Continue Watching rail on catalog
+- Record watch history in a **separate** `watch_history` table (completed progress still deletes)
+- Library tab: favorites + builtin lists + history + stats
 - Hydrate favorites and watch-progress at launch (after settings)
 
 ## Non-goals

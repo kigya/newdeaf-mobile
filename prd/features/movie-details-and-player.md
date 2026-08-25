@@ -2,8 +2,8 @@
 
 - **Status:** implemented
 - **Last updated:** 2026-08-25
-- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `app/player/[id].tsx`, `src/features/playback/`, `src/data/catalog/kinopoisk.ts`, `src/data/catalog/tmdb.ts`, `DownloadSheet`, `YoutubeDownloadSheet`
-- **Screens:** [`../screens/movie-detail.md`](../screens/movie-detail.md), [`online-player.md`](../screens/online-player.md)
+- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `app/player/[id].tsx`, `app/trailer/[videoId].tsx`, `src/features/playback/`, `src/data/catalog/kinopoisk/`, `src/data/catalog/tmdb/`, `DownloadSheet`, `YoutubeDownloadSheet`
+- **Screens:** [`../screens/movie-detail.md`](../screens/movie-detail.md), [`online-player.md`](../screens/online-player.md), [`trailer.md`](../screens/trailer.md)
 
 ## Problem
 
@@ -12,7 +12,9 @@ Users need title metadata and a way to watch online with the site player (qualit
 ## Goals
 
 - Show movie details from scrape; optional TMDB localization; KP ratings when present
-- Enrich via Kinopoisk when matched: facts, cast photos, awards, similar/related (NewDeaf-resolved only)
+- Enrich via Kinopoisk when matched: facts (spoiler-gated), cast photos, awards, similar/related, stills, reviews (spoiler-gated), sequels/prequels (NewDeaf-resolved only); age limits like `age18` display as `18+`
+- In-app trailer (`/trailer/[videoId]`) with download (same Wi-Fi/storage gate + “Download anyway”)
+- Add to local lists from the detail page
 - Online playback in embedded site player (WebView)
 - Entry points to download sheets (movie stream + YouTube when applicable)
 - Resume dialog when watch progress is resumable

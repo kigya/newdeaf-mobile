@@ -25,6 +25,7 @@
 | Function | Request | Notes |
 |----------|---------|-------|
 | `fetchHomeMovies(page)` | `GET /` or `/page/N/` | `parseCatalogPage` |
+| `fetchSitePopular()` | `GET /` | `parsePopularCarousel` on `#owl-popular`; `[]` if markup missing |
 | `fetchGenreMovies(href, page)` | genre path + `/page/N/` | same parser |
 | `searchMovies(query)` | `POST /index.php?do=search` | Win1251 form-encoded `story`; min length 4 |
 | `fetchMovieDetail(hrefOrId)` | slug HTML or `/www/index.php?newsid=ID` | full detail parse |
@@ -46,26 +47,30 @@
 
 ---
 
-## 2. TMDB (`src/data/catalog/tmdb.ts`)
+## 2. TMDB (`src/data/catalog/tmdb/`)
 
 | Item | Detail |
 |------|--------|
-| Purpose | Localized title/plot/cast for movie detail (especially EN locale); Russian title bridge for Latin search queries |
+| Purpose | Localized title/plot/cast; Russian title bridge; extras (backdrops/videos/cast photos); trending/upcoming rails |
 | Auth | `EXPO_PUBLIC_TMDB_API_KEY` and/or `EXPO_PUBLIC_TMDB_READ_TOKEN` |
 | Failure | Soft: null / miss; **memory cache** for hits and null misses; **transient HTTP errors are not cached** |
-| Not used for | Catalog listing, downloads, favorites |
+| Images | `https://image.tmdb.org/t/p/{size}{path}` |
+| Not used for | Direct catalog listing without `resolveInCatalog` |
 
 ---
 
-## 3. Kinopoisk Unofficial (`src/data/catalog/kinopoisk.ts`)
+## 3. Kinopoisk Unofficial (`src/data/catalog/kinopoisk/`)
 
 | Item | Detail |
 |------|--------|
-| Purpose | Facts, staff/cast photos, awards, similar/related titles on movie detail |
+| Purpose | Facts, staff, awards, similar/related; extras (slogan/age/length, stills, YouTube videos, reviews, seasons, sequels); collection rails |
 | Auth | `EXPO_PUBLIC_KINOPOISK_API_KEY` |
-| Failure | Soft-fail per section; never blocks scraped detail |
-| Similar/related | Resolved back into NewDeaf via `searchMovies`; hide section if empty |
-| Not used for | Playback, downloads |
+| Budget | Parallel cap 4; retry 429 twice; **circuit-breaker on 402** for the session |
+| Collections | `GET /api/v2.2/films/collections?type=` (`TOP_250_MOVIES`, `TOP_POPULAR_MOVIES`, …); premieres `year`+`month`; legacy `/films/top` soft-fail |
+| Reviews | No spoiler flag from API — client collapses by default |
+| Sequels | `GET /api/v2.1/films/{id}/sequels_and_prequels` (not the similars list) |
+| Similar/related/sequels | Resolved back into NewDeaf via `resolveInCatalog`; hide rail/section if empty |
+| Not used for | Playback URLs |
 
 ---
 

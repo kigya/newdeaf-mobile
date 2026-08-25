@@ -3,7 +3,7 @@
 - **Status:** implemented
 - **Last updated:** 2026-08-25
 - **Route:** `/movie/[id]`
-- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `src/data/catalog/catalog.ts`, `tmdb.ts`, `kinopoisk.ts`, `DownloadSheet`, `StreamResolver`
+- **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `src/data/catalog/catalog.ts`, `src/data/catalog/tmdb/`, `src/data/catalog/kinopoisk/`, `DownloadSheet`, `StreamResolver`
 
 ## Params
 
@@ -21,11 +21,12 @@ Full title page: scraped metadata, optional TMDB (EN) + Kinopoisk enrichment, se
 ## Major sections / flows
 
 - Favorite heart in header (optimistic busy guard; works with params before full load)
-- Poster, ratings (KP/IMDb), plot, cast/facts/awards/similar/related (KP soft sections)
+- Poster, ratings (KP/IMDb), slogan/age/length, plot, gallery, spoiler-gated reviews, cast/facts/awards/similar/related/sequels (KP soft sections)
+- Kinopoisk `ratingAgeLimits` (`age18`) is shown as `18+`
 - Serial: season/episode chips; prefer last watch-progress season/episode when valid
-- Stream track preview via hidden `StreamResolver`
-- Trailer (YouTube) when present
-- Sticky Watch / Download bar
+- Stream track preview via hidden `StreamResolver` (1×1, unmounted when the route is not `/movie/*`)
+- Trailer → `/trailer/[videoId]` when a YouTube id exists; WebView embed otherwise
+- Sticky Watch / Download / Add to list
 - Offline completed copies → `/offline/[downloadId]`
 - Similar/related → push another `/movie/[id]`
 
@@ -38,6 +39,7 @@ Full title page: scraped metadata, optional TMDB (EN) + Kinopoisk enrichment, se
 ## Download flow
 
 - Opens `DownloadSheet` with resolved tracks; **original audio pre-selected** when present (`Eng.Original`); preferred quality from settings; user override allowed
+- Series: **Whole season** CTA enqueues missing episodes from the current payload; primary Download is still the selected episode
 - Tapping an audio chip on the detail page opens the same sheet pinned to that track
 - Duplicate warnings via download match helpers
 

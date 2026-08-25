@@ -1,7 +1,7 @@
 # Cross-cutting behavior
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 
 Non-obvious runtime rules that span multiple screens. Agents must preserve these unless a PRD explicitly changes them.
 
@@ -50,6 +50,9 @@ Non-obvious runtime rules that span multiple screens. Agents must preserve these
 | Remove | AbortController; abort errors do **not** mark failed; delete files + row |
 | Movie queue | Serialized via `movieJobChain` |
 | YouTube enqueue | Not serialized with movie chain |
+| Wi-Fi only | `enqueue` / `enqueueYoutube` throw `DownloadGateError('wifi')` unless `force`; sheets and trailer offer “Download anyway” |
+| Storage cap | `storageCapMb` 0 = unlimited; at/over cap → `DownloadGateError('storage')` |
+| Skip intro | Persist `skipTimeSec`/`removeTimeSec`; button only inside `[start,end)`; else `title_prefs.introSkipSec` |
 | Progress | Movie HLS capped ~0.92 until subs finish, then 1.0 |
 | CDN 403 | Prefer WebView Chrome fetch via MediaFetchHost; tuned Origin/Referer for playlist vs segment |
 | HLS BYTERANGE / fMP4 | Download slices into discrete `init_*` / `seg_*` files; local playlist has no BYTERANGE; verify decoded size |
@@ -62,7 +65,7 @@ Non-obvious runtime rules that span multiple screens. Agents must preserve these
 | Rule | Value / behavior |
 |------|------------------|
 | Resumable | `positionSec >= 30` and not completed |
-| Completed ratio | `position/duration >= 0.9` → delete row |
+| Completed ratio | `position/duration >= 0.9` → delete **progress** row (history still recorded) |
 | Near-end | duration ≥ **15 min** AND remaining < **120s** → completed |
 | Duration sanitize | Drop if ≤ position+5s or duration < 300s (false WebView buffer lengths) |
 | Online save | Throttle 2s + unmount flush; no seed on player mount |

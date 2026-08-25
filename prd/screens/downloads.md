@@ -1,7 +1,7 @@
 # Screen: Downloads
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Route:** `/(tabs)/downloads`
 - **Related code:** `app/(tabs)/downloads.tsx` → `src/screens/downloads/`, `src/features/downloads/`, `YoutubeDownloadSheet`, `StreamResolver`
 
@@ -12,7 +12,7 @@ Show download queue / library; start YouTube downloads; retry failed movie downl
 ## UI
 
 - YouTube CTA → `YoutubeDownloadSheet`
-- `FlatList` of `DownloadRow`
+- `FlatList` of `DownloadRow` (size when `sizeBytes` known)
 - Resolving banner when a movie download is resolving
 - Delete / retry confirm dialogs
 - Near-invisible `StreamResolver` kept while movie download is resolving/queued/downloading (CDN session fingerprint-safe)

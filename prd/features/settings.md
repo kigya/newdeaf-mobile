@@ -1,7 +1,7 @@
 # PRD: Settings
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Related code:** `app/(tabs)/settings.tsx`, `src/features/settings/`, `src/shared/i18n/`, `DownloadSheet`, `YoutubeDownloadSheet`
 - **Screens:** [`../screens/settings.md`](../screens/settings.md)
 
@@ -14,7 +14,8 @@ Users need to choose app language and a default download quality without repeati
 - Settings tab with language switcher (ru / en), Moti animated control
 - App locale is SSOT in SQLite; react to OS language changes (AppState + `getLocales` sync)
 - Default download quality (`best` / 1080 / 720 / 480 / 360) pre-selects in movie and YouTube download sheets; user can override per download
-- Show app version at the bottom (`expo-constants` → app.json `1.0.0`)
+- Wi-Fi-only downloads (`expo-network`)
+- Optional storage cap (0 = unlimited) with usage readout
 
 ## Non-goals
 

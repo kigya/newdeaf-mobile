@@ -18,6 +18,10 @@ Users want to save streams (and optional YouTube sources) and watch them without
 - Offline playback with VTT when present
 - Default quality from Settings; per-download override
 - Retry failed movie downloads via StreamResolver rematch (native) or `resolveEmbedStream` (embess/fsst)
+- Persist bnsi `skipTime`/`removeTime` on the download row; skip-intro in offline player
+- Manual skip point in `title_prefs` for players without markers
+- Season planner: Download sheet **Whole season** CTA enqueues only missing episodes (`planSeasonDownload`); current-episode Download stays one job
+- Wi-Fi-only + storage-cap gate on `enqueue` and `enqueueYoutube` (`force: true` override, no new status), including trailer download
 
 ## Non-goals
 

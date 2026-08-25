@@ -1,7 +1,7 @@
 # Screen: Settings
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Route:** `/(tabs)/settings`
 - **Related code:** `app/(tabs)/settings.tsx` → `src/screens/settings/SettingsScreen.tsx`, `src/features/settings/`, `src/shared/i18n/`
 
@@ -28,6 +28,11 @@ Configure app language and default download quality; show app version and author
 - User can still override quality **per download** in the sheet
 - Applies to movies the user wants to watch/download only as a **default preference for download sheets** — online WebView player quality remains controlled by the site player UI
 
+### Wi-Fi only + storage cap
+
+- Toggle `downloadsWifiOnly` (expo-network; enqueue rejects unless `force`)
+- Cap chips including unlimited (`storageCapMb = 0`); usage via recursive download-dir size
+
 ### Attribution footer
 
 - Below the version line: `t('settings.madeBy')` + linked `t('settings.madeByLink')` (`kigya`)
@@ -37,7 +42,7 @@ Configure app language and default download quality; show app version and author
 
 - Displayed at bottom: `t('settings.version', { version })`
 - Version resolution order: `Constants.expoConfig?.version` → `Constants.nativeApplicationVersion` → `'1.0.0'`
-- Source of truth for shipping version: `app.json` / `package.json` (`1.0.0`)
+- Source of truth for shipping version: `app.json` / `package.json` (`1.1.0`)
 
 ## States
 
