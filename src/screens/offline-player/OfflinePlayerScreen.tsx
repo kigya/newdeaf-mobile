@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
+import { introWindowFromMarkers, isPlausibleIntroSkip } from '@/src/data/catalog/streamMarkers';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { getDownload } from '@/src/features/downloads/db';
 import type { DownloadRecord } from '@/src/features/downloads/types';
@@ -10,6 +11,7 @@ import { t } from '@/src/shared/i18n';
 import { OfflinePlayer } from '@/src/features/playback/offline/OfflinePlayer';
 import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts } from '@/src/shared/theme';
+import { useTitlePrefsStore } from '@/src/features/title-prefs/store';
 import { resumeDialogMessage } from '@/src/features/watch-progress/format';
 import { fetchProgress, useWatchProgressStore } from '@/src/features/watch-progress/store';
 import {
@@ -25,6 +27,8 @@ export default function OfflinePlayerScreen() {
   const router = useRouter();
   const upsertProgress = useWatchProgressStore((s) => s.upsert);
   const clearProgress = useWatchProgressStore((s) => s.clear);
+  const setIntroSkipSec = useTitlePrefsStore((s) => s.setIntroSkipSec);
+  const titlePrefs = useTitlePrefsStore((s) => s.byId);
 
   const [item, setItem] = useState<DownloadRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +167,33 @@ export default function OfflinePlayerScreen() {
         initialPositionSec={initialPositionSec}
         onProgress={handleProgress}
         onClose={() => router.back()}
+        introSkip={(() => {
+          const fromDownload = introWindowFromMarkers(
+            item.skipTimeSec != null ? String(item.skipTimeSec) : undefined,
+            item.removeTimeSec != null ? String(item.removeTimeSec) : undefined
+          );
+          if (fromDownload) return fromDownload;
+          const catalogId = catalogMovieIdFromDownloadMovieId(
+            item.movieId,
+            item.season,
+            item.episode
+          );
+          const manual = titlePrefs[catalogId]?.introSkipSec;
+          if (isPlausibleIntroSkip(manual)) {
+            return { startSec: 0, endSec: manual as number };
+          }
+          return undefined;
+        })()}
+        onMarkIntroSkip={(positionSec) => {
+          const catalogId = catalogMovieIdFromDownloadMovieId(
+            item.movieId,
+            item.season,
+            item.episode
+          );
+          if (isPlausibleIntroSkip(positionSec)) {
+            void setIntroSkipSec(catalogId, positionSec);
+          }
+        }}
       />
     </View>
   );

@@ -1,13 +1,15 @@
 import Constants from 'expo-constants';
 import { MotiView } from 'moti';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LayoutChangeEvent, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/src/shared/ui/Screen';
 import { t } from '@/src/shared/i18n';
+import { computeDownloadsUsage, formatBytes } from '@/src/features/downloads/storage';
 import { useSettingsStore } from '@/src/features/settings/store';
 import {
   QUALITY_OPTIONS,
+  STORAGE_CAP_OPTIONS_MB,
   type AppLocale,
   type PreferredDownloadQuality,
 } from '@/src/features/settings/types';
@@ -72,12 +74,21 @@ function LanguageSwitcher({
 export default function SettingsScreen() {
   const locale = useSettingsStore((s) => s.locale);
   const preferredDownloadQuality = useSettingsStore((s) => s.preferredDownloadQuality);
+  const downloadsWifiOnly = useSettingsStore((s) => s.downloadsWifiOnly);
+  const storageCapMb = useSettingsStore((s) => s.storageCapMb);
   const setLocale = useSettingsStore((s) => s.setLocale);
   const setPreferredDownloadQuality = useSettingsStore((s) => s.setPreferredDownloadQuality);
+  const setDownloadsWifiOnly = useSettingsStore((s) => s.setDownloadsWifiOnly);
+  const setStorageCapMb = useSettingsStore((s) => s.setStorageCapMb);
+  const [usedBytes, setUsedBytes] = useState(0);
   const version =
     Constants.expoConfig?.version ??
     Constants.nativeApplicationVersion ??
     '1.0.0';
+
+  useEffect(() => {
+    void computeDownloadsUsage().then(setUsedBytes);
+  }, []);
 
   return (
     <Screen title={t('settings.title')} subtitle={t('settings.subtitle')}>
@@ -108,6 +119,44 @@ export default function SettingsScreen() {
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {qualityLabel(q)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.sectionTitle, styles.sectionSpaced]}>
+          {t('settings.wifiOnly')}
+        </Text>
+        <Text style={styles.hint}>{t('settings.wifiOnlyHint')}</Text>
+        <Pressable
+          onPress={() => void setDownloadsWifiOnly(!downloadsWifiOnly)}
+          style={[styles.chip, downloadsWifiOnly && styles.chipActive]}
+        >
+          <Text style={[styles.chipText, downloadsWifiOnly && styles.chipTextActive]}>
+            {t('settings.wifiOnly')}
+          </Text>
+        </Pressable>
+
+        <Text style={[styles.sectionTitle, styles.sectionSpaced]}>
+          {t('settings.storageCap')}
+        </Text>
+        <Text style={styles.hint}>
+          {t('settings.storageUsage', { used: formatBytes(usedBytes) })}
+        </Text>
+        <View style={styles.chips}>
+          {STORAGE_CAP_OPTIONS_MB.map((cap) => {
+            const active = storageCapMb === cap;
+            return (
+              <Pressable
+                key={cap}
+                onPress={() => void setStorageCapMb(cap)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {cap === 0
+                    ? t('settings.storageUnlimited')
+                    : t('settings.storageCapValue', { n: cap / 1024 })}
                 </Text>
               </Pressable>
             );

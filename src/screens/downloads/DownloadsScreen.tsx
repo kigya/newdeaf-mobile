@@ -16,6 +16,7 @@ import { StreamResolver } from '@/src/features/playback/StreamResolver';
 import { t } from '@/src/shared/i18n';
 import { errorMessage } from '@/src/shared/lib/errorMessage';
 import { colors, fonts, radius, spacing } from '@/src/shared/theme';
+import { formatBytes } from '@/src/features/downloads/storage';
 import { runPendingDelete } from '@/src/screens/downloads/pendingDelete';
 
 function statusLabel(item: DownloadRecord): string {
@@ -117,6 +118,9 @@ function DownloadRow({
           >
             {statusLabel(item)}
           </Text>
+          {item.sizeBytes != null && item.sizeBytes > 0 ? (
+            <Text style={styles.line}>{t('downloads.sizeLine', { size: formatBytes(item.sizeBytes) })}</Text>
+          ) : null}
           {item.status === 'downloading' ? (
             <View style={styles.progressTrack}>
               <View
