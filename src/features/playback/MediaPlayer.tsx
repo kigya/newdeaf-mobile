@@ -58,6 +58,8 @@ type Props = {
   children?: ReactNode;
   /** Offline / local playback — enable background audio + auto PiP. */
   enableBackgroundPlayback?: boolean;
+  introSkip?: { startSec: number; endSec: number };
+  onMarkIntroSkip?: (positionSec: number) => void;
 };
 
 function buildSource(
@@ -85,6 +87,8 @@ export function MediaPlayer({
   onClose,
   children,
   enableBackgroundPlayback = false,
+  introSkip,
+  onMarkIntroSkip,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [cues, setCues] = useState<VttCue[]>([]);
@@ -346,6 +350,28 @@ export function MediaPlayer({
 
       {children}
 
+      {introSkip &&
+      currentTime >= introSkip.startSec &&
+      currentTime < introSkip.endSec ? (
+        <Pressable
+          onPress={() => {
+            player.currentTime = introSkip.endSec;
+          }}
+          style={[styles.skipBtn, { bottom: insets.bottom + 88 }]}
+        >
+          <Text style={styles.skipText}>{t('offline.skipIntro')}</Text>
+        </Pressable>
+      ) : null}
+
+      {onMarkIntroSkip ? (
+        <Pressable
+          onPress={() => onMarkIntroSkip(currentTime)}
+          style={[styles.markBtn, { bottom: insets.bottom + 48 }]}
+        >
+          <Text style={styles.markText}>{t('offline.markSkipPoint')}</Text>
+        </Pressable>
+      ) : null}
+
       {playerError ? (
         <View style={styles.errorBanner} pointerEvents="none">
           <Text style={styles.errorText}>{playerError}</Text>
@@ -433,5 +459,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     textAlign: 'center',
+  },
+  skipBtn: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+  },
+  skipText: {
+    color: colors.black,
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+  },
+  markBtn: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: colors.blackOverlay65,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 8,
+  },
+  markText: {
+    color: colors.white,
+    fontFamily: fonts.medium,
+    fontSize: 12,
   },
 });
