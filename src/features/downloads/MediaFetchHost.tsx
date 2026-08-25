@@ -7,6 +7,7 @@ import {
   registerMediaFetchInjector,
   useMediaFetchStore,
 } from '@/src/features/downloads/mediaFetch';
+import { isResolvableEmbedUrl } from '@/src/data/catalog/embedStreams';
 import { colors } from '@/src/shared/theme';
 import { CHROME_ANDROID_USER_AGENT as USER_AGENT } from '@/src/shared/lib/userAgent';
 
@@ -83,6 +84,18 @@ export function MediaFetchHost() {
       if (handleMediaFetchMessage(msg)) return;
       // CDN signed URLs need the player bnsi/Borth session — hook_ready alone is too early.
       if (msg.type === 'stream') {
+        setReady(true);
+        return;
+      }
+      // Embess/fsst: no bnsi stream event — wait for the *iframe* hook (url === 'true').
+      // Parent shell also emits hook_ready; posting nd_fetch before the iframe loads is a no-op.
+      if (
+        msg.type === 'debug' &&
+        msg.message === 'hook_ready' &&
+        playerUrl &&
+        isResolvableEmbedUrl(playerUrl) &&
+        String(msg.url) === 'true'
+      ) {
         setReady(true);
       }
     } catch {

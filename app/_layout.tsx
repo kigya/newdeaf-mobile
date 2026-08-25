@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { EmbedHtmlFetchHost } from '@/src/features/downloads/EmbedHtmlFetchHost';
 import { MediaFetchHost } from '@/src/features/downloads/MediaFetchHost';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import { useFavoritesStore } from '@/src/features/favorites/store';
@@ -130,6 +131,7 @@ export default function RootLayout() {
         />
       </Stack>
       <MediaFetchHost />
+      <EmbedHtmlFetchHost />
     </GestureHandlerRootView>
   );
 }

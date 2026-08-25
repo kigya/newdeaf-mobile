@@ -108,4 +108,24 @@ describe('MediaFetchHost', () => {
     onMessage({ nativeEvent: { data: 'nope' } });
     await unmount();
   });
+
+  it('marks ready on iframe hook_ready for resolvable embeds only', async () => {
+    mockMediaFetchStoreState.playerUrl = 'https://fsst.online/playlist_iframe/1/';
+    await render(<MediaFetchHost />);
+    const onMessage = mockLastWebViewProps.onMessage as (e: {
+      nativeEvent: { data: string };
+    }) => void;
+    onMessage({
+      nativeEvent: {
+        data: JSON.stringify({ type: 'debug', message: 'hook_ready', url: 'false' }),
+      },
+    });
+    expect(mockSetReady).not.toHaveBeenCalled();
+    onMessage({
+      nativeEvent: {
+        data: JSON.stringify({ type: 'debug', message: 'hook_ready', url: 'true' }),
+      },
+    });
+    expect(mockSetReady).toHaveBeenCalledWith(true);
+  });
 });
