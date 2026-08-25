@@ -26,6 +26,7 @@ type Props = {
   isDownloaded?: (movieId: string) => boolean;
   getWatchProgress?: (movieId: string) => WatchProgressRecord | undefined;
   onLongPressMovie?: (movie: MovieSummary) => void;
+  emptyCompact?: boolean;
 };
 
 export function MovieGrid({
@@ -44,6 +45,7 @@ export function MovieGrid({
   isDownloaded,
   getWatchProgress,
   onLongPressMovie,
+  emptyCompact,
 }: Props) {
   const { width, columns } = useBreakpoint();
   const gap = spacing.md;
@@ -51,26 +53,27 @@ export function MovieGrid({
   const cardWidth = (width - horizontalPad * 2 - gap * (columns - 1)) / columns;
   const router = useRouter();
 
+  const loaderStyle = [styles.loader, emptyCompact && styles.loaderCompact];
   const listEmpty =
     loading && movies.length === 0 ? (
-      <View style={styles.loader}>
+      <View style={loaderStyle}>
         <ActivityIndicator color={colors.accent} size="large" />
       </View>
     ) : !loading && movies.length === 0 ? (
-      <EmptyState title={emptyTitle} subtitle={emptySubtitle} />
+      <EmptyState title={emptyTitle} subtitle={emptySubtitle} compact={emptyCompact} />
     ) : null;
 
   // Always use FlatList when a header is provided so rail/banner stay visible while loading.
   if (!ListHeaderComponent && loading && movies.length === 0) {
     return (
-      <View style={styles.loader}>
+      <View style={loaderStyle}>
         <ActivityIndicator color={colors.accent} size="large" />
       </View>
     );
   }
 
   if (!ListHeaderComponent && !loading && movies.length === 0) {
-    return <EmptyState title={emptyTitle} subtitle={emptySubtitle} />;
+    return <EmptyState title={emptyTitle} subtitle={emptySubtitle} compact={emptyCompact} />;
   }
 
   return (
@@ -79,7 +82,7 @@ export function MovieGrid({
       key={columns}
       keyExtractor={(item) => item.id}
       numColumns={columns}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, movies.length === 0 && styles.contentEmpty]}
       columnWrapperStyle={columns > 1 && movies.length > 0 ? { gap } : undefined}
       showsVerticalScrollIndicator={false}
       onEndReached={onEndReached}
@@ -132,6 +135,8 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxxl,
+  },
+  contentEmpty: {
     flexGrow: 1,
   },
   loader: {
@@ -139,6 +144,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 80,
+  },
+  loaderCompact: {
+    justifyContent: 'flex-start',
+    paddingTop: spacing.xl,
   },
   footer: {
     paddingVertical: spacing.xl,
