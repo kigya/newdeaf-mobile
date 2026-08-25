@@ -1,4 +1,5 @@
 import { absolutize, stripTags } from './client';
+import { pickVenomEmbedUrl } from './embedStreams';
 import type { MovieDetail, MovieSummary, PlayerFileList, PlayerFileListEntry } from './types';
 
 export function parseMovieIdFromHref(href: string): { id: string; slug: string; href: string } | null {
@@ -457,11 +458,19 @@ function pickPlayerUrls(html: string): PickedPlayers {
 
   const bestNative = nativeCandidates[0];
   if (bestNative) {
-    return { playerUrl: bestNative, nativePlayer: true };
+    // Keep Venom/fsst as download fallback: native collaps HLS (vkvideo) can
+    // 404 on playlist fetch while the sibling embed still has working masters.
+    const venom = pickVenomEmbedUrl(unique);
+    const fsst = unique.find((u) => /fsst\.online|incvideo/i.test(u));
+    return {
+      playerUrl: bestNative,
+      fallbackPlayerUrl: venom ?? fsst,
+      nativePlayer: true,
+    };
   }
 
-  // Prefer embess (rich demuxed audio/subs) over progressive/other embeds for download resolve.
-  const embess = unique.find((u) => /embess\.ws/i.test(u));
+  // Prefer Venom (rich demuxed audio/subs) over progressive/other embeds for download resolve.
+  const venom = pickVenomEmbedUrl(unique);
   const fsst = unique.find((u) => /fsst\.online|incvideo/i.test(u));
   const otherEmbed = unique.find(
     (u) =>
@@ -469,7 +478,7 @@ function pickPlayerUrls(html: string): PickedPlayers {
       !/newdeaf\.ru|filmy-na-angliskom/i.test(u)
   );
   const primary =
-    embess ??
+    venom ??
     fsst ??
     otherEmbed ??
     unique.find((u) => !/newdeaf\.ru|filmy-na-angliskom|youtube\.com|youtu\.be/i.test(u));

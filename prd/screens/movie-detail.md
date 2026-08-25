@@ -1,7 +1,7 @@
 # Screen: Movie detail
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Route:** `/movie/[id]`
 - **Related code:** `app/movie/[id].tsx` → `src/screens/movie-detail/`, `src/data/catalog/catalog.ts`, `tmdb.ts`, `kinopoisk.ts`, `DownloadSheet`, `StreamResolver`
 
@@ -37,17 +37,20 @@ Full title page: scraped metadata, optional TMDB (EN) + Kinopoisk enrichment, se
 
 ## Download flow
 
-- Opens `DownloadSheet` with resolved tracks; preferred quality from settings; user override allowed
+- Opens `DownloadSheet` with resolved tracks; **original audio pre-selected** when present (`Eng.Original`); preferred quality from settings; user override allowed
+- Tapping an audio chip on the detail page opens the same sheet pinned to that track
 - Duplicate warnings via download match helpers
 
 ## Special: `nativePlayer === false`
 
 - Watch still uses embed URL in WebView
 - If player is **embess** (resolvable embed): scrape `makePlayer` + master HLS via `resolveEmbedStream` → show audio/sub chips; Download enabled with pre-resolved `StreamPayload`
-- If embess resolve fails and page has **fsst** sibling embed (`fallbackPlayerUrl`): soft-fallback to progressive MP4 qualities (Default audio; no rich dub/sub chips)
+- If embess resolve fails and page has **fsst** sibling embed (`fallbackPlayerUrl`): soft-fallback to progressive MP4 qualities; **`resolvedPlayerUrl` switches to the winning embed** for download headers
+- If player is **fsst `playlist_iframe`**: parse episode list from Playerjs `file:[{comment,file}]`; each episode is a selectable source with progressive qualities; season/episode parsed from comments
 - If player is another non-native embed without a resolvable URL: show `tracksUnavailable` / `downloadUnavailable`
 - Other third-party embeds (kodik, etc.): tracks unavailable; download disabled
 - Embess demuxed audio: download stores `audioId` (audio media playlist) and writes a local multi-rendition master
+- **Native balancer + embess/namy/domem/fsst sibling:** Watch still uses native player URL; download tracks resolve from `fallbackPlayerUrl` (VenomPlayer `playlist.seasons[].episodes[]` or `source.hls`) so collaps/vkvideo playlist 404s do not block offline
 
 ## States
 

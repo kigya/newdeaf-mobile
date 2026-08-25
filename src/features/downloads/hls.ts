@@ -523,3 +523,38 @@ export function pickSubtitleTrack(
     tracks[0]
   );
 }
+
+/** Higher is better. NewDeaf is original-audio + subs — prefer Eng.Original over dubs. */
+export function audioPreferenceScore(label: string): number {
+  const l = label.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!l || l === '—' || l === '-' || /^delete$/.test(l)) return -100;
+  if (/eng\.?\s*original/.test(l) || /english\s*original/.test(l)) return 100;
+  if (/оригинал/.test(l) && /англ|eng/.test(l)) return 95;
+  if (/^оригинал$/.test(l) || /^original$/.test(l)) return 90;
+  if (/\boriginal\b/.test(l) && !/дуб|dub/.test(l)) return 85;
+  if (/^english$|^англ/.test(l) || /^\(?english\)?/.test(l)) return 70;
+  if (/\beng\b/.test(l) && !/дуб|dub/.test(l)) return 60;
+  return 0;
+}
+
+export function pickPreferredAudioIndex(sources: { label: string }[]): number {
+  if (!sources.length) return 0;
+  let best = 0;
+  let bestScore = audioPreferenceScore(sources[0].label);
+  for (let i = 1; i < sources.length; i++) {
+    const score = audioPreferenceScore(sources[i].label);
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** Move the preferred original track to the front for download UI. */
+export function orderAudioSources<T extends { label: string }>(sources: T[]): T[] {
+  if (sources.length < 2) return sources;
+  const idx = pickPreferredAudioIndex(sources);
+  if (idx <= 0) return sources;
+  return [sources[idx], ...sources.filter((_, i) => i !== idx)];
+}

@@ -10,6 +10,7 @@ import { EmptyState } from '@/src/shared/ui/EmptyState';
 import { Screen } from '@/src/shared/ui/Screen';
 import { YoutubeDownloadSheet } from '@/src/shared/ui/YoutubeDownloadSheet';
 import { useDownloadsStore } from '@/src/features/downloads/store';
+import { isResolvableEmbedUrl } from '@/src/data/catalog/embedStreams';
 import type { DownloadRecord } from '@/src/features/downloads/types';
 import { StreamResolver } from '@/src/features/playback/StreamResolver';
 import { t } from '@/src/shared/i18n';
@@ -158,12 +159,13 @@ export default function DownloadsScreen() {
   const resolvingMovie = items.find(
     (i) => i.status === 'resolving' && i.source !== 'youtube' && !!i.playerUrl
   );
-  // Keep the warm player iframe mounted while a movie download runs — CDN fetch
-  // must use that WebView session (OkHttp is fingerprint-blocked).
+  // Keep the warm player iframe mounted while a native movie download runs — CDN fetch
+  // must use that WebView session (OkHttp is fingerprint-blocked). Skip for embess/fsst.
   const mediaFetchMovie = items.find(
     (i) =>
       i.source !== 'youtube' &&
       !!i.playerUrl &&
+      !isResolvableEmbedUrl(i.playerUrl) &&
       (i.status === 'resolving' || i.status === 'queued' || i.status === 'downloading')
   );
 

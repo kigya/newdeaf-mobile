@@ -145,6 +145,11 @@ export function getGenres(): Genre[] {
 export { BASE_URL, parseMovieList };
 export {
   isEmbessPlayerUrl,
+  isFsstPlayerUrl,
+  isFsstPlaylistUrl,
+  isProgressiveMediaUrl,
   isResolvableEmbedUrl,
+  isVenomEmbedUrl,
+  pickVenomEmbedUrl,
   resolveEmbedStream,
 } from './embedStreams';

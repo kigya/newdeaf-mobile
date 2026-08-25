@@ -1,18 +1,35 @@
 import {
   bucketQualityLabel,
   buildEmbessStreamPayload,
+  canonicalizeEmbedFetchUrl,
+  extractBalancedArray,
   extractBalancedObject,
   isEmbessPlayerUrl,
   isFsstPlayerUrl,
+  isFsstPlaylistUrl,
+  isProgressiveMediaUrl,
   isResolvableEmbedUrl,
+  isVenomEmbedUrl,
   matchAudioPlaylistUri,
+  parseEmbessPlaylistEpisodes,
   parseEmbessSource,
+  pickEmbessPlaylistEpisode,
+  pickVenomEmbedUrl,
+  parseFsstEpisodeComment,
+  parseFsstPlaylistEpisodes,
   parseFsstProgressiveSources,
   parseMasterPlaylist,
   resolveEmbedStream,
   resolveEmbessStream,
   resolveFsstStream,
 } from '@/src/data/catalog/embedStreams';
+
+jest.mock('@/src/shared/lib/webviewHtmlFetch', () => ({
+  isWebViewHtmlFetcherReady: jest.fn(() => false),
+  fetchHtmlViaWebView: jest.fn(async () => {
+    throw new Error('WebView HTML fetcher not ready');
+  }),
+}));
 
 const EMBESS_HTML = `
 <html><body><script>
@@ -47,13 +64,42 @@ https://cdn.example/v2.m3u8
 describe('embedStreams helpers', () => {
   it('detects embess / fsst / resolvable URLs', () => {
     expect(isEmbessPlayerUrl('https://api.embess.ws/embed/movie/1')).toBe(true);
+    expect(isEmbessPlayerUrl('https://api.namy.ws/embed/movie/1')).toBe(true);
+    expect(isEmbessPlayerUrl('https://api.domem.ws/embed/movie/1')).toBe(true);
     expect(isEmbessPlayerUrl('https://evil.com')).toBe(false);
     expect(isEmbessPlayerUrl('not a url embess.ws')).toBe(true);
+    expect(isEmbessPlayerUrl('not a url namy.ws')).toBe(true);
+    expect(isVenomEmbedUrl('not a url domem.ws')).toBe(true);
+    expect(isVenomEmbedUrl('https://embess.ws/e/1')).toBe(true);
+    expect(isVenomEmbedUrl('https://namy.ws/e/1')).toBe(true);
+    expect(isVenomEmbedUrl('https://domem.ws/e/1')).toBe(true);
+    expect(isVenomEmbedUrl('https://embess.ws.evil.com/x')).toBe(false);
+    expect(
+      pickVenomEmbedUrl([
+        'https://api.namy.ws/embed/1',
+        'https://api.embess.ws/embed/1',
+        'https://api.domem.ws/embed/1',
+      ])
+    ).toContain('embess.ws');
+    expect(pickVenomEmbedUrl(['https://stloadi.live/x'])).toBeUndefined();
     expect(isFsstPlayerUrl('https://fsst.online/embed/1')).toBe(true);
     expect(isFsstPlayerUrl('https://www.incvideo1.online/x')).toBe(true);
     expect(isFsstPlayerUrl('not-a-url fsst.online')).toBe(true);
+    expect(isFsstPlaylistUrl('https://fsst.online/playlist_iframe/17980/')).toBe(true);
+    expect(isProgressiveMediaUrl('https://cdn/x.mp4?t=1')).toBe(true);
+    expect(isProgressiveMediaUrl('https://cdn/master.m3u8')).toBe(false);
+    expect(
+      isProgressiveMediaUrl(
+        'https://cdn.example/clip.mp4/master.m3u8?sig=1'
+      )
+    ).toBe(false);
+    expect(isProgressiveMediaUrl('https://cdn/get_file/20/x_360p.mp4')).toBe(true);
     expect(isResolvableEmbedUrl('https://api.embess.ws/x')).toBe(true);
+    expect(isResolvableEmbedUrl('https://api.namy.ws/embed/1')).toBe(true);
     expect(isResolvableEmbedUrl('https://stloadi.live/x')).toBe(false);
+    expect(parseFsstEpisodeComment('Кухня 2-1')).toEqual({ season: 2, episode: 1 });
+    expect(parseFsstEpisodeComment('Кухня 2 - 12')).toEqual({ season: 2, episode: 12 });
+    expect(parseFsstPlaylistEpisodes('<html></html>')).toEqual([]);
   });
 
   it('extracts balanced objects with nested braces and strings', () => {
@@ -63,6 +109,90 @@ describe('embedStreams helpers', () => {
     expect(extractBalancedObject('nope', 0)).toBeNull();
     expect(extractBalancedObject('{ "a\\": 1", b: 2 }', 0)).toContain('b: 2');
     expect(extractBalancedObject('{ unterminated', 0)).toBeNull();
+  });
+
+  it('extracts balanced arrays and parses VenomPlayer episode playlists', () => {
+    expect(extractBalancedArray('[1, [2], "a]"]', 0)).toBe('[1, [2], "a]"]');
+    expect(extractBalancedArray('nope', 0)).toBeNull();
+    expect(extractBalancedArray('[ unterminated', 0)).toBeNull();
+    expect(parseEmbessPlaylistEpisodes('<html></html>')).toEqual([]);
+    expect(parseEmbessPlaylistEpisodes('seasons: [not-json')).toEqual([]);
+    expect(parseEmbessPlaylistEpisodes('seasons: [not json]')).toEqual([]);
+    expect(parseEmbessPlaylistEpisodes('seasons: {"nope":1}')).toEqual([]);
+    expect(parseEmbessPlaylistEpisodes('seasons: [1,2]')).toEqual([]);
+
+    const html = `
+      makePlayer({
+        playlist: {
+          seasons: [
+            {
+              "season": 1,
+              "episodes": [
+                {
+                  "episode": "1",
+                  "hls": "https://cdn.example/e1/master.m3u8",
+                  "audio": { "names": ["Eng.Original", "HDRezka"], "order": [0, 1] },
+                  "cc": [{ "url": "https://cdn.example/e1.ru.vtt", "name": "Рус. полные" }]
+                },
+                {
+                  "episode": "2",
+                  "hls": "https://cdn.example/e2/master.m3u8",
+                  "audio": { "names": ["Eng.Original"], "order": [] }
+                },
+                { "episode": "3" }
+              ]
+            }
+          ]
+        }
+      });
+    `;
+    const episodes = parseEmbessPlaylistEpisodes(html);
+    expect(episodes).toHaveLength(2);
+    expect(episodes[0]).toMatchObject({
+      season: 1,
+      episode: 1,
+      source: { hls: 'https://cdn.example/e1/master.m3u8' },
+    });
+    expect(episodes[0].source.audio.names).toEqual(['Eng.Original', 'HDRezka']);
+    expect(episodes[0].source.cc[0].name).toBe('Рус. полные');
+    expect(pickEmbessPlaylistEpisode(episodes, 1, 2)?.source.hls).toContain('/e2/');
+    expect(pickEmbessPlaylistEpisode(episodes, 9, 9)?.source.hls).toContain('/e1/');
+    expect(pickEmbessPlaylistEpisode(episodes)?.source.hls).toContain('/e1/');
+    expect(pickEmbessPlaylistEpisode([], 1, 1)).toBeUndefined();
+  });
+
+  it('skips invalid VenomPlayer playlist seasons, episodes, and captions', () => {
+    const html = `
+      seasons: [
+        { "season": 0, "episodes": [{ "episode": "1", "hls": "https://cdn/skip.m3u8" }] },
+        { "season": 1, "episodes": "nope" },
+        {
+          "season": 1,
+          "episodes": [
+            {
+              "episode": "1",
+              "hls": "https://cdn.example/ok.m3u8",
+              "audio": { "names": ["A"], "order": [] },
+              "cc": [null, { "name": "no-url" }, { "url": "https://cdn/ok.vtt", "name": "OK" }]
+            },
+            { "episode": "0", "hls": "https://cdn.example/zero.m3u8" },
+            { "episode": "x", "hls": "https://cdn.example/nan.m3u8" },
+            { "episode": "2", "hls": "https://cdn.example/e2.m3u8" },
+            {
+              "episode": "3",
+              "hls": "https://cdn.example/e3.m3u8",
+              "cc": [{ "url": "https://cdn/noname.vtt" }]
+            }
+          ]
+        }
+      ]
+    `;
+    const episodes = parseEmbessPlaylistEpisodes(html);
+    expect(episodes).toHaveLength(3);
+    expect(episodes[0].source.cc).toEqual([{ url: 'https://cdn/ok.vtt', name: 'OK' }]);
+    expect(episodes[0].source.audio.order).toEqual([0]);
+    expect(episodes[1].source.audio.names).toEqual([]);
+    expect(episodes[2].source.cc[0]).toEqual({ url: 'https://cdn/noname.vtt', name: '' });
   });
 
   it('parses cc entries with name-before-url order', () => {
@@ -94,6 +224,22 @@ describe('embedStreams helpers', () => {
     expect(source!.audio.order).toEqual([0, 1, 2, 4, 3, 5]);
     expect(source!.cc).toHaveLength(2);
     expect(source!.cc[0].name).toMatch(/полн/i);
+  });
+
+  it('ignores function makePlayer(opts) definition before the call site', () => {
+    const html = `
+      function makePlayer(opts) { return opts; }
+      makePlayer({
+        source: {
+          hls: "https://cdn.example/live.m3u8",
+          audio: { names: ["A"], order: [0] },
+          cc: [{ url: "https://cdn/ru.vtt", name: "Рус. полные" }]
+        }
+      });
+    `;
+    const source = parseEmbessSource(html);
+    expect(source?.hls).toContain('live.m3u8');
+    expect(source?.cc[0].name).toMatch(/полн/i);
   });
 
   it('returns null when makePlayer missing', () => {
@@ -255,6 +401,12 @@ low.m3u8
     expect(
       matchAudioPlaylistUri([{ name: 'nosuffix', uri: 'https://cdn/x', groupId: 'audio0' }], 0)
     ).toBe('https://cdn/x');
+    expect(
+      matchAudioPlaylistUri(
+        [{ name: 'Audio', uri: 'https://cdn/file.mp4/index-a7.m3u8', groupId: 'audio0' }],
+        6
+      )
+    ).toContain('index-a7');
   });
 
   it('builds StreamPayload filtering delete and mapping audioId', () => {
@@ -355,6 +507,76 @@ describe('resolveEmbedStream network', () => {
     expect(payload?.tracks.length).toBeGreaterThan(0);
   });
 
+  it('resolves a VenomPlayer playlist episode by season/episode', async () => {
+    const playlistHtml = `
+      makePlayer({
+        playlist: {
+          seasons: [{
+            "season": 1,
+            "episodes": [
+              { "episode": "1", "hls": "https://cdn.example/e1/master.m3u8", "audio": { "names": ["A"] } },
+              { "episode": "2", "hls": "https://cdn.example/e2/master.m3u8", "audio": { "names": ["Eng.Original"] } }
+            ]
+          }]
+        }
+      });
+    `;
+    global.fetch = jest.fn(async (url: RequestInfo) => {
+      const u = String(url);
+      if (u.includes('embess')) {
+        return { ok: true, text: async () => playlistHtml } as Response;
+      }
+      if (u.includes('/e2/')) {
+        return { ok: true, text: async () => MASTER } as Response;
+      }
+      return { ok: true, text: async () => '#EXTM3U\nnot-the-episode' } as Response;
+    }) as typeof fetch;
+
+    const payload = await resolveEmbessStream('https://api.embess.ws/embed/movie/76587', {
+      season: 1,
+      episode: 2,
+    });
+    expect(payload?.hlsSource[0].label).toBe('Eng.Original');
+    expect(payload?.hlsSource[0].season).toBe(1);
+    expect(payload?.hlsSource[0].episode).toBe(2);
+    expect(String((global.fetch as jest.Mock).mock.calls[1][0])).toContain('/e2/');
+  });
+
+  it('falls through to source.hls when playlist master is not m3u8', async () => {
+    const html = `
+      makePlayer({
+        playlist: {
+          seasons: [{
+            "season": 1,
+            "episodes": [
+              { "episode": "1", "hls": "https://cdn.example/bad/master.m3u8", "audio": { "names": ["A"] } }
+            ]
+          }]
+        },
+        source: {
+          hls: "https://cdn.example/good/master.m3u8",
+          audio: { names: ["Fallback"] }
+        }
+      });
+    `;
+    global.fetch = jest.fn(async (url: RequestInfo) => {
+      const u = String(url);
+      if (u.includes('embess')) {
+        return { ok: true, text: async () => html } as Response;
+      }
+      if (u.includes('/bad/')) {
+        return { ok: true, text: async () => 'not a playlist' } as Response;
+      }
+      return { ok: true, text: async () => MASTER } as Response;
+    }) as typeof fetch;
+
+    const payload = await resolveEmbessStream('https://api.embess.ws/embed/movie/76587', {
+      season: 1,
+      episode: 1,
+    });
+    expect(payload?.hlsSource[0].label).toBe('Fallback');
+  });
+
   it('returns null when embess HTML has no makePlayer', async () => {
     global.fetch = jest.fn(async () => ({
       ok: true,
@@ -372,6 +594,173 @@ describe('resolveEmbedStream network', () => {
 
     const payload = await resolveFsstStream('https://fsst.online/embed/1');
     expect(payload?.hlsSource[0].quality['720']).toContain('720.mp4');
+    expect(payload?.progressive).toBe(true);
+  });
+
+  it('resolves fsst playlist_iframe episodes', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () => `
+        var player = new Playerjs({
+          file:
+[{"comment": "Кухня 2-1","file":"[720p]https://cdn/e1_720.mp4,[360p]https://cdn/e1_360.mp4"},{"comment": "Кухня 2 - 12","file":"[720p]https://cdn/e12_720.mp4"}]
+        });
+      `,
+    })) as unknown as typeof fetch;
+
+    const payload = await resolveFsstStream('https://fsst.online/playlist_iframe/17980/');
+    expect(payload?.progressive).toBe(true);
+    expect(payload?.hlsSource).toHaveLength(2);
+    expect(payload?.hlsSource[0]).toMatchObject({
+      label: 'Кухня 2-1',
+      season: 2,
+      episode: 1,
+    });
+    expect(payload?.hlsSource[0].quality['720']).toContain('e1_720.mp4');
+    expect(payload?.hlsSource[1]).toMatchObject({ season: 2, episode: 12 });
+  });
+
+  it('parses playlist entries with escaped quotes in comments', () => {
+    const eps = parseFsstPlaylistEpisodes(`
+      file: [{"comment": "Ep \\"A\\"","file":"[720p]https://cdn/a.mp4"}]
+    `);
+    expect(eps).toHaveLength(1);
+    expect(eps[0].label).toContain('A');
+  });
+
+  it('tolerates nested arrays inside playlist entries', () => {
+    const eps = parseFsstPlaylistEpisodes(
+      'file: [{"comment":"A","file":"[720p]https://cdn/a.mp4","poster":[1,2]}]'
+    );
+    expect(eps).toHaveLength(1);
+    expect(eps[0].quality['720']).toContain('a.mp4');
+  });
+
+  it('skips playlist edges: no array, unclosed, empty quality, empty episodes', async () => {
+    expect(parseFsstPlaylistEpisodes('file: not-an-array')).toEqual([]);
+    expect(parseFsstPlaylistEpisodes('file: [{"comment":"A","file":"[720p]https://cdn/a.mp4"')).toEqual(
+      []
+    );
+    expect(
+      parseFsstPlaylistEpisodes('file: [{"comment":"","file":"[720p]https://cdn/a.mp4"}]')
+    ).toEqual([]);
+    expect(parseFsstPlaylistEpisodes('file: [{"comment":"Solo","file":"nope"}]')).toEqual([]);
+
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () => '<html>no playlist</html>',
+    })) as unknown as typeof fetch;
+    await expect(resolveFsstStream('https://fsst.online/playlist_iframe/1/')).resolves.toBeNull();
+  });
+
+  it('times out hung OkHttp embed fetch', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn(
+      () => new Promise(() => {})
+    ) as unknown as typeof fetch;
+
+    const pending = resolveEmbessStream('https://api.embess.ws/embed/1');
+    await jest.advanceTimersByTimeAsync(13000);
+    await expect(pending).resolves.toBeNull();
+    jest.useRealTimers();
+  });
+
+  it('falls back to WebView HTML fetch when OkHttp times out', async () => {
+    const { isWebViewHtmlFetcherReady, fetchHtmlViaWebView } = jest.requireMock(
+      '@/src/shared/lib/webviewHtmlFetch'
+    ) as {
+      isWebViewHtmlFetcherReady: jest.Mock;
+      fetchHtmlViaWebView: jest.Mock;
+    };
+    isWebViewHtmlFetcherReady.mockReturnValue(true);
+    fetchHtmlViaWebView.mockResolvedValue(`
+      file: [{"comment":"Кухня 2-1","file":"[360p]https://cdn/e1.mp4"}]
+    `);
+    global.fetch = jest.fn(() => new Promise(() => {})) as unknown as typeof fetch;
+
+    const payload = await resolveFsstStream('https://fsst.online/playlist_iframe/1/');
+    expect(fetchHtmlViaWebView).toHaveBeenCalledWith(
+      'https://fsst.online/playlist_iframe/1/',
+      expect.any(String),
+      expect.objectContaining({ playerUrl: 'https://fsst.online/playlist_iframe/1/' })
+    );
+    expect(payload?.progressive).toBe(true);
+    expect(payload?.hlsSource).toHaveLength(1);
+    isWebViewHtmlFetcherReady.mockReturnValue(false);
+  });
+
+  it('prefers WebView for fsst/incvideo before OkHttp', async () => {
+    const { isWebViewHtmlFetcherReady, fetchHtmlViaWebView } = jest.requireMock(
+      '@/src/shared/lib/webviewHtmlFetch'
+    ) as {
+      isWebViewHtmlFetcherReady: jest.Mock;
+      fetchHtmlViaWebView: jest.Mock;
+    };
+    isWebViewHtmlFetcherReady.mockReturnValue(true);
+    fetchHtmlViaWebView.mockResolvedValue(`
+      file: [{"comment":"Кухня 2-3","file":"[360p]https://cdn/e3.mp4"}]
+    `);
+    const fetchMock = jest.fn() as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const payload = await resolveFsstStream('https://fsst.online/playlist_iframe/3/');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(payload?.hlsSource?.[0]?.label).toBe('Кухня 2-3');
+    isWebViewHtmlFetcherReady.mockReturnValue(false);
+  });
+
+  it('canonicalizes fsst.online HTML fetch URLs to incvideo1.online', () => {
+    expect(canonicalizeEmbedFetchUrl('https://fsst.online/playlist_iframe/18805/')).toBe(
+      'https://incvideo1.online/playlist_iframe/18805/'
+    );
+    expect(canonicalizeEmbedFetchUrl('https://www.fsst.online/x')).toBe(
+      'https://incvideo1.online/x'
+    );
+    expect(canonicalizeEmbedFetchUrl('https://incvideo1.online/x')).toBe(
+      'https://incvideo1.online/x'
+    );
+    // Invalid absolute URL → catch branch (no scheme → replace no-op).
+    expect(canonicalizeEmbedFetchUrl('fsst.online/x')).toBe('fsst.online/x');
+  });
+
+  it('falls back to OkHttp when preferred WebView fetch fails', async () => {
+    const { isWebViewHtmlFetcherReady, fetchHtmlViaWebView } = jest.requireMock(
+      '@/src/shared/lib/webviewHtmlFetch'
+    ) as {
+      isWebViewHtmlFetcherReady: jest.Mock;
+      fetchHtmlViaWebView: jest.Mock;
+    };
+    isWebViewHtmlFetcherReady.mockReturnValue(true);
+    fetchHtmlViaWebView.mockRejectedValueOnce(new Error('wv fail'));
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () =>
+        `file: [{"comment":"Кухня 2-9","file":"[360p]https://cdn/e9.mp4"}]`,
+    })) as unknown as typeof fetch;
+
+    const payload = await resolveFsstStream('https://fsst.online/playlist_iframe/9/');
+    expect(payload?.hlsSource?.[0]?.label).toBe('Кухня 2-9');
+    expect(global.fetch).toHaveBeenCalled();
+    isWebViewHtmlFetcherReady.mockReturnValue(false);
+  });
+
+  it('uses WebView after OkHttp fails for embess hosts', async () => {
+    const { isWebViewHtmlFetcherReady, fetchHtmlViaWebView } = jest.requireMock(
+      '@/src/shared/lib/webviewHtmlFetch'
+    ) as {
+      isWebViewHtmlFetcherReady: jest.Mock;
+      fetchHtmlViaWebView: jest.Mock;
+    };
+    isWebViewHtmlFetcherReady.mockReturnValue(true);
+    // preferWebView true for embess — first call is WebView for HTML
+    fetchHtmlViaWebView
+      .mockResolvedValueOnce(EMBESS_HTML)
+      .mockResolvedValueOnce(MASTER);
+
+    const payload = await resolveEmbessStream('https://api.embess.ws/embed/movie/1');
+    expect(payload?.hlsSource?.length).toBeGreaterThan(0);
+    expect(fetchHtmlViaWebView).toHaveBeenCalled();
+    isWebViewHtmlFetcherReady.mockReturnValue(false);
   });
 
   it('returns null from resolveEmbedStream for unknown hosts', async () => {

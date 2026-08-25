@@ -14,7 +14,12 @@ import { isResolvableEmbedUrl, resolveEmbedStream } from '@/src/data/catalog/emb
 import type { StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { sheetStyles } from '@/src/shared/ui/sheetStyles';
-import { pickPrimaryMediaUrl, pickSubtitleTrack } from '@/src/features/downloads/hls';
+import {
+  orderAudioSources,
+  pickPreferredAudioIndex,
+  pickPrimaryMediaUrl,
+  pickSubtitleTrack,
+} from '@/src/features/downloads/hls';
 import { findAnyExistingMovie, findExistingSameTracks } from '@/src/features/downloads/match';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import type { DownloadRecord } from '@/src/features/downloads/types';
@@ -35,6 +40,8 @@ type Props = {
   playerUrl: string;
   /** Pre-resolved streams (embess embed); skips bnsi StreamResolver when set. */
   initialStream?: StreamPayload | null;
+  /** When set, pre-select this audio label (e.g. chip tap on movie detail). */
+  initialAudioLabel?: string;
   season?: number;
   episode?: number;
 };
@@ -48,6 +55,7 @@ export function DownloadSheet({
   posterUrl,
   playerUrl,
   initialStream,
+  initialAudioLabel,
   season,
   episode,
 }: Props) {
@@ -79,10 +87,18 @@ export function DownloadSheet({
         setError(t('downloadSheet.emptyStreams'));
         return;
       }
-      setPayload(data);
+      const ordered = orderAudioSources(data.hlsSource);
+      setPayload({ ...data, hlsSource: ordered });
       setError(null);
-      const first = data.hlsSource[0];
-      const qs = qualityOptions(first);
+      const wanted = initialAudioLabel?.trim().toLowerCase();
+      let audioIdx = pickPreferredAudioIndex(ordered);
+      if (wanted) {
+        const found = ordered.findIndex((s) => s.label.trim().toLowerCase() === wanted);
+        if (found >= 0) audioIdx = found;
+      }
+      setAudioIndex(audioIdx);
+      const selectedAudio = ordered[audioIdx];
+      const qs = qualityOptions(selectedAudio);
       setQuality(pickPreferredQuality(qs, preferredDownloadQuality));
       const trackList = data.tracks || [];
       const preferred = pickSubtitleTrack(trackList);
@@ -93,7 +109,7 @@ export function DownloadSheet({
         setSubtitleIndex(Math.max(0, idx));
       }
     },
-    [preferredDownloadQuality]
+    [initialAudioLabel, preferredDownloadQuality]
   );
 
   const onResolved = useCallback(
@@ -121,7 +137,7 @@ export function DownloadSheet({
       setError(null);
       void (async () => {
         try {
-          const data = await resolveEmbedStream(playerUrl);
+          const data = await resolveEmbedStream(playerUrl, { season, episode });
           /* istanbul ignore next -- sheet closed while resolving */
           if (cancelled) return;
           if (data?.hlsSource?.length) applyPayload(data);
@@ -136,7 +152,7 @@ export function DownloadSheet({
         cancelled = true;
       };
     }
-  }, [visible, initialStream, playerUrl, applyPayload]);
+  }, [visible, initialStream, playerUrl, applyPayload, season, episode]);
 
   const doEnqueue = async () => {
     // startDownload / duplicate-other confirm only call this when tracks are selected.
@@ -149,8 +165,15 @@ export function DownloadSheet({
     }
     setStarting(true);
     try {
+      const epSeason = season ?? audio.season;
+      const epEpisode = episode ?? audio.episode;
+      const baseMovieId = movieId.replace(/_s\d+_e\d+$/i, '');
+      const enqueueMovieId =
+        epSeason != null && epEpisode != null
+          ? `${baseMovieId}_s${epSeason}_e${epEpisode}`
+          : movieId;
       await enqueue({
-        movieId,
+        movieId: enqueueMovieId,
         title,
         posterUrl,
         playerUrl,
@@ -160,8 +183,9 @@ export function DownloadSheet({
         hlsUrl: pickPrimaryMediaUrl(hlsUrl),
         subtitleUrl: subtitle.src,
         audioPlaylistUrl: audio.audioId,
-        season,
-        episode,
+        mediaKind: payload?.progressive ? 'progressive' : 'hls',
+        season: epSeason,
+        episode: epEpisode,
       });
       onClose();
     } catch (e) {

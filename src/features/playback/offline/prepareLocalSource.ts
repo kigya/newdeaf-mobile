@@ -25,19 +25,25 @@ function joinFileUri(dirUri: string, name: string): string {
   return `${base}${clean}`;
 }
 
+function isLocalPlaylistRef(uri: string): boolean {
+  if (!uri || uri.startsWith('http://') || uri.startsWith('https://')) return false;
+  const bare = uri.split('?')[0].toLowerCase();
+  return bare.endsWith('.m3u8');
+}
+
+function absolutePlaylistName(fileName: string): string {
+  const base = fileName.replace(/^\.\//, '').split('?')[0];
+  if (base.endsWith('.absolute.m3u8')) return base;
+  if (base.endsWith('.m3u8')) return `${base.slice(0, -'.m3u8'.length)}.absolute.m3u8`;
+  return `${base}.absolute.m3u8`;
+}
+
 /**
- * ExoPlayer often stalls after the first HLS segment when the local playlist
- * uses bare relative names. Rewrite media / EXT-X-MAP URIs to absolute file://
- * and ensure VOD end marker so the player does not wait for a live update.
+ * Rewrite one HLS playlist to absolute file:// media / URI= refs and ensure ENDLIST.
+ * Nested local `.m3u8` refs are prepared recursively first.
  */
-export async function prepareLocalPlaybackUri(
-  path: string,
-  mediaKind: 'hls' | 'progressive'
-): Promise<string> {
-  const sourceUri = ensureFileUri(path);
-  if (mediaKind !== 'hls') {
-    return sourceUri;
-  }
+async function rewritePlaylistToAbsolute(sourceUri: string, depth = 0): Promise<string> {
+  if (depth > 4) return sourceUri;
 
   const info = await FileSystem.getInfoAsync(sourceUri);
   if (!info.exists) {
@@ -64,17 +70,37 @@ export async function prepareLocalPlaybackUri(
         continue;
       }
       if (trimmed === '#EXT-X-ENDLIST') hasEndList = true;
-      const mapMatch = trimmed.match(/URI="([^"]+)"/);
-      if (mapMatch && (trimmed.includes('EXT-X-MAP') || trimmed.includes('EXT-X-KEY'))) {
-        const abs = joinFileUri(dir, mapMatch[1]);
+
+      const uriMatch = trimmed.match(/URI="([^"]+)"/);
+      const isUriTag =
+        uriMatch &&
+        (trimmed.includes('EXT-X-MAP') ||
+          trimmed.includes('EXT-X-KEY') ||
+          /EXT-X-MEDIA:/i.test(trimmed));
+
+      if (uriMatch && isUriTag) {
+        let target = uriMatch[1];
+        if (isLocalPlaylistRef(target)) {
+          const childSource = joinFileUri(dir, target.split('?')[0]);
+          await rewritePlaylistToAbsolute(childSource, depth + 1);
+          target = absolutePlaylistName(target.split('?')[0]);
+        }
+        const abs = joinFileUri(dir, target);
         const withoutRange = trimmed
           .replace(/,BYTERANGE="[^"]*"/i, '')
           .replace(/BYTERANGE="[^"]*",?/i, '')
           .replace(/,\s*$/, '');
-        out.push(withoutRange.replace(`URI="${mapMatch[1]}"`, `URI="${abs}"`));
+        out.push(withoutRange.replace(`URI="${uriMatch[1]}"`, `URI="${abs}"`));
       } else {
         out.push(trimmed);
       }
+      continue;
+    }
+
+    if (isLocalPlaylistRef(trimmed)) {
+      const childSource = joinFileUri(dir, trimmed.split('?')[0]);
+      await rewritePlaylistToAbsolute(childSource, depth + 1);
+      out.push(joinFileUri(dir, absolutePlaylistName(trimmed.split('?')[0])));
       continue;
     }
 
@@ -85,7 +111,25 @@ export async function prepareLocalPlaybackUri(
     out.push('#EXT-X-ENDLIST');
   }
 
-  const absolutePath = `${dir}index.absolute.m3u8`;
+  const leaf = sourceUri.split('?')[0].split('/').pop() || 'index.m3u8';
+  const absolutePath = `${dir}${absolutePlaylistName(leaf)}`;
   await FileSystem.writeAsStringAsync(absolutePath, `${out.join('\n')}\n`);
   return absolutePath;
+}
+
+/**
+ * ExoPlayer often stalls after the first HLS segment when the local playlist
+ * uses bare relative names. Rewrite media / EXT-X-MAP / EXT-X-MEDIA URIs to
+ * absolute file:// (including demuxed child video/audio playlists) and ensure
+ * VOD end marker so the player does not wait for a live update.
+ */
+export async function prepareLocalPlaybackUri(
+  path: string,
+  mediaKind: 'hls' | 'progressive'
+): Promise<string> {
+  const sourceUri = ensureFileUri(path);
+  if (mediaKind !== 'hls') {
+    return sourceUri;
+  }
+  return rewritePlaylistToAbsolute(sourceUri);
 }

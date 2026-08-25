@@ -1,15 +1,43 @@
+import {
+  fetchHtmlViaWebView,
+  isWebViewHtmlFetcherReady,
+} from '@/src/shared/lib/webviewHtmlFetch';
 import type { CaptionTrack, HlsSource, StreamPayload, StreamQualityMap } from './types';
 import { BASE_URL } from './types';
 
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
-export function isEmbessPlayerUrl(url: string): boolean {
+/** VenomPlayer mirrors used as download embeds (same makePlayer / playlist JSON). */
+function venomHostRank(url: string): number {
   try {
-    return new URL(url).hostname.toLowerCase().includes('embess.ws');
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'embess.ws' || host.endsWith('.embess.ws')) return 0;
+    if (host === 'namy.ws' || host.endsWith('.namy.ws')) return 1;
+    if (host === 'domem.ws' || host.endsWith('.domem.ws')) return 2;
   } catch {
-    return /embess\.ws/i.test(url);
+    if (/embess\.ws/i.test(url)) return 0;
+    if (/namy\.ws/i.test(url)) return 1;
+    if (/domem\.ws/i.test(url)) return 2;
   }
+  return 99;
+}
+
+export function isVenomEmbedUrl(url: string): boolean {
+  return venomHostRank(url) < 99;
+}
+
+/** Alias: Venom embeds including namy/domem mirrors. */
+export function isEmbessPlayerUrl(url: string): boolean {
+  return isVenomEmbedUrl(url);
+}
+
+/** Prefer embess, then namy, then domem when several Venom iframes exist. */
+export function pickVenomEmbedUrl(urls: string[]): string | undefined {
+  const hits = urls.filter((u) => isVenomEmbedUrl(u));
+  if (!hits.length) return undefined;
+  hits.sort((a, b) => venomHostRank(a) - venomHostRank(b));
+  return hits[0];
 }
 
 export function isFsstPlayerUrl(url: string): boolean {
@@ -26,6 +54,25 @@ export function isResolvableEmbedUrl(url: string): boolean {
   return isEmbessPlayerUrl(url) || isFsstPlayerUrl(url);
 }
 
+/**
+ * fsst.online 301s to incvideo1.online. On some Xiaomi OkHttp stacks the
+ * fsst host hangs forever while the canonical CDN host responds quickly —
+ * always fetch HTML from the redirect target.
+ */
+export function canonicalizeEmbedFetchUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host === 'fsst.online' || host === 'www.fsst.online') {
+      u.hostname = 'incvideo1.online';
+      return u.toString();
+    }
+  } catch {
+    return url.replace(/^(https?:\/\/)(?:www\.)?fsst\.online/i, '$1incvideo1.online');
+  }
+  return url;
+}
+
 type EmbessAudioMeta = {
   names: string[];
   order: number[];
@@ -39,16 +86,17 @@ export type EmbessSource = {
   cc: EmbessCc[];
 };
 
-/**
- * Extract balanced `{...}` starting at `openBraceIndex` (must point at `{`).
- * Handles nested braces and string literals with escapes.
- */
-export function extractBalancedObject(source: string, openBraceIndex: number): string | null {
-  if (source[openBraceIndex] !== '{') return null;
+function extractBalanced(
+  source: string,
+  openIndex: number,
+  openCh: '{' | '[',
+  closeCh: '}' | ']'
+): string | null {
+  if (source[openIndex] !== openCh) return null;
   let depth = 0;
   let inString: '"' | "'" | '`' | null = null;
   let escaped = false;
-  for (let i = openBraceIndex; i < source.length; i++) {
+  for (let i = openIndex; i < source.length; i++) {
     const ch = source[i];
     if (inString) {
       if (escaped) {
@@ -66,13 +114,26 @@ export function extractBalancedObject(source: string, openBraceIndex: number): s
       inString = ch;
       continue;
     }
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
+    if (ch === openCh) depth += 1;
+    else if (ch === closeCh) {
       depth -= 1;
-      if (depth === 0) return source.slice(openBraceIndex, i + 1);
+      if (depth === 0) return source.slice(openIndex, i + 1);
     }
   }
   return null;
+}
+
+/**
+ * Extract balanced `{...}` starting at `openBraceIndex` (must point at `{`).
+ * Handles nested braces and string literals with escapes.
+ */
+export function extractBalancedObject(source: string, openBraceIndex: number): string | null {
+  return extractBalanced(source, openBraceIndex, '{', '}');
+}
+
+/** Extract balanced `[...]` starting at `openBracketIndex` (must point at `[`). */
+export function extractBalancedArray(source: string, openBracketIndex: number): string | null {
+  return extractBalanced(source, openBracketIndex, '[', ']');
 }
 
 function parseJsStringArray(raw: string): string[] {
@@ -94,7 +155,10 @@ function parseJsNumberArray(raw: string): number[] {
  * Parse embess `makePlayer({ ... source: { hls, audio, cc } ...})` from embed HTML.
  */
 export function parseEmbessSource(html: string): EmbessSource | null {
-  const makeIdx = html.search(/makePlayer\s*\(/i);
+  // Prefer the call site `makePlayer({...})` — the page also defines
+  // `function makePlayer(opts)` which must not win the search.
+  const callMatch = html.match(/makePlayer\s*\(\s*\{/i);
+  const makeIdx = callMatch?.index ?? html.search(/makePlayer\s*\(/i);
   if (makeIdx < 0) return null;
   const braceIdx = html.indexOf('{', makeIdx);
   if (braceIdx < 0) return null;
@@ -166,6 +230,93 @@ export function parseEmbessSource(html: string): EmbessSource | null {
   }
 
   return { hls, audio: { names, order }, cc };
+}
+
+export type EmbessPlaylistEpisode = {
+  season: number;
+  episode: number;
+  source: EmbessSource;
+};
+
+type EmbessPlaylistCcJson = { url?: string; name?: string };
+type EmbessPlaylistEpisodeJson = {
+  episode?: string | number;
+  hls?: string;
+  audio?: { names?: string[]; order?: number[] };
+  cc?: EmbessPlaylistCcJson[];
+};
+type EmbessPlaylistSeasonJson = {
+  season?: number;
+  episodes?: EmbessPlaylistEpisodeJson[];
+};
+
+/**
+ * VenomPlayer serial playlist: `makePlayer({ playlist: { seasons: [{ season, episodes }] } })`.
+ */
+export function parseEmbessPlaylistEpisodes(html: string): EmbessPlaylistEpisode[] {
+  const seasonsKey = html.search(/seasons\s*:\s*\[/);
+  if (seasonsKey < 0) return [];
+  const bracket = html.indexOf('[', seasonsKey);
+  const literal = extractBalancedArray(html, bracket);
+  if (!literal) return [];
+  let seasons: EmbessPlaylistSeasonJson[];
+  try {
+    seasons = JSON.parse(literal) as EmbessPlaylistSeasonJson[];
+  } catch {
+    return [];
+  }
+  /* istanbul ignore next -- JSON.parse of a [...] literal is always an array */
+  if (!Array.isArray(seasons)) return [];
+
+  const out: EmbessPlaylistEpisode[] = [];
+  for (const seasonBlock of seasons) {
+    const season = Number(seasonBlock?.season);
+    if (!Number.isFinite(season) || season <= 0) continue;
+    const episodes = seasonBlock.episodes;
+    if (!Array.isArray(episodes)) continue;
+    for (const ep of episodes) {
+      const hls = typeof ep?.hls === 'string' ? ep.hls.trim() : '';
+      if (!hls) continue;
+      const episode = Number(ep.episode);
+      if (!Number.isFinite(episode)) continue;
+      if (episode <= 0) continue;
+      const names = Array.isArray(ep.audio?.names)
+        ? ep.audio.names.filter((n): n is string => typeof n === 'string')
+        : [];
+      const order = Array.isArray(ep.audio?.order)
+        ? ep.audio.order.filter((n): n is number => Number.isFinite(n))
+        : names.map((_, i) => i);
+      const cc: EmbessCc[] = [];
+      if (Array.isArray(ep.cc)) {
+        for (const cap of ep.cc) {
+          if (cap?.url) cc.push({ url: cap.url, name: cap.name ?? '' });
+        }
+      }
+      out.push({
+        season,
+        episode,
+        source: {
+          hls,
+          audio: { names, order: order.length ? order : names.map((_, i) => i) },
+          cc,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+export function pickEmbessPlaylistEpisode(
+  episodes: EmbessPlaylistEpisode[],
+  season?: number,
+  episode?: number
+): EmbessPlaylistEpisode | undefined {
+  if (!episodes.length) return undefined;
+  if (season != null && episode != null) {
+    const hit = episodes.find((e) => e.season === season && e.episode === episode);
+    if (hit) return hit;
+  }
+  return episodes[0];
 }
 
 export type MasterAudioTrack = {
@@ -271,6 +422,12 @@ export function matchAudioPlaylistUri(
     return m != null && Number(m[1]) === nameIndex;
   });
   if (bySuffix) return bySuffix.uri;
+  // Embess CDN: NAME may omit the index while URI is `index-a{n+1}.m3u8`.
+  const byUriIndex = audioTracks.find((t) => {
+    const m = t.uri.match(/index-a(\d+)/i);
+    return m != null && Number(m[1]) === nameIndex + 1;
+  });
+  if (byUriIndex) return byUriIndex.uri;
   return audioTracks[nameIndex]?.uri;
 }
 
@@ -327,11 +484,26 @@ export function buildEmbessStreamPayload(
   return { hlsSource, tracks };
 }
 
-async function fetchText(url: string, referer: string): Promise<string> {
+/** Hermes-safe timeout — AbortSignal.timeout is missing on some RN runtimes.
+ * Prefer Promise.race over AbortSignal: passing `signal` to fetch hangs on some
+ * Android OkHttp stacks (Xiaomi), while the same host is reachable without it.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    /* istanbul ignore else -- timer is always set before race settles */
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function fetchTextOkHttp(url: string, referer: string): Promise<string> {
   const res = await fetch(url, {
-    signal: AbortSignal.timeout(25000),
     headers: {
-      Accept: '*/*',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       'User-Agent': USER_AGENT,
       Referer: referer,
     },
@@ -340,50 +512,237 @@ async function fetchText(url: string, referer: string): Promise<string> {
   return await res.text();
 }
 
+async function fetchText(url: string, referer: string, playerUrl?: string): Promise<string> {
+  // Keep fsst.online as-is: it 301s to incvideo1.online, which some mobile
+  // networks cannot reach at all (ERR_CONNECTION_TIMED_OUT). Chrome still needs
+  // the redirect hop from a reachable fsst host when the CDN is available.
+  const sessionPlayer = playerUrl || referer;
+  if (isWebViewHtmlFetcherReady()) {
+    try {
+      return await fetchHtmlViaWebView(url, referer, {
+        timeoutMs: 90000,
+        playerUrl: /(?:embess|namy|domem)\.ws|fsst\.online|incvideo/i.test(sessionPlayer)
+          ? sessionPlayer
+          : url,
+      });
+    } catch (webErr) {
+      console.warn('[embedStreams] WebView embed fetch failed, trying OkHttp', url, webErr);
+      return await withTimeout(fetchTextOkHttp(url, referer), 12000, 'embed OkHttp');
+    }
+  }
+  return await withTimeout(fetchTextOkHttp(url, referer), 12000, 'embed OkHttp');
+}
+
+/** True when media URL is progressive (MP4), not an HLS master. */
+export function isProgressiveMediaUrl(url: string): boolean {
+  const bare = url.split('?')[0].toLowerCase();
+  // Embess CDN paths look like `…/file.mp4/master.m3u8` — HLS, not progressive.
+  if (/\.m3u8(\/|$)/i.test(bare)) return false;
+  return /\.(mp4|webm|mkv|mov)$/i.test(bare);
+}
+
+export function isFsstPlaylistUrl(url: string): boolean {
+  return /\/playlist_iframe\//i.test(url);
+}
+
+/** Parse `Кухня 2-1` / `Кухня 2 - 12` style comments into season/episode. */
+export function parseFsstEpisodeComment(comment: string): {
+  season?: number;
+  episode?: number;
+} {
+  const m = comment.match(/(\d+)\s*[-–—]\s*(\d+)/);
+  if (!m) return {};
+  return { season: Number(m[1]), episode: Number(m[2]) };
+}
+
+/**
+ * Progressive quality map from a `[720p]url,[360p]url` file string (or HTML blob).
+ */
+export function parseFsstQualityMap(fileOrHtml: string): StreamQualityMap {
+  const map: StreamQualityMap = {};
+  const re = /\[(\d{3,4})p\](https?:\/\/[^\s"'<>,\]]+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(fileOrHtml))) {
+    map[m[1]] = m[2].replace(/\/$/, '');
+  }
+  const alt = /https?:\/\/[^\s"'<>]+?_(\d{3,4})p[^\s"'<>]*\.mp4[^\s"'<>]*/gi;
+  while ((m = alt.exec(fileOrHtml))) {
+    const q = m[1];
+    if (q && !map[q]) map[q] = m[0].replace(/\/$/, '');
+  }
+  return map;
+}
+
 /**
  * Progressive MP4 qualities from fsst / incvideo embed HTML (`video_alt_url` style).
  */
 export function parseFsstProgressiveSources(html: string): HlsSource | null {
-  // Pattern: ,[720p]https://...mp4/  or 360p / 1080p
-  const map: StreamQualityMap = {};
-  const re = /\[(\d{3,4})p\](https?:\/\/[^\s"'<>,\]]+)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    map[m[1]] = m[2].replace(/\/$/, '');
-  }
-  // Also plain get_file URLs with _360p / _720p
-  const alt = /https?:\/\/[^\s"'<>]+?_(\d{3,4})p[^\s"'<>]*\.mp4[^\s"'<>]*/gi;
-  while ((m = alt.exec(html))) {
-    const q = m[1];
-    if (q && !map[q]) map[q] = m[0].replace(/\/$/, '');
-  }
+  const map = parseFsstQualityMap(html);
   if (!Object.keys(map).length) return null;
   return { label: 'Default', quality: map };
 }
 
-export async function resolveEmbessStream(playerUrl: string): Promise<StreamPayload | null> {
+/**
+ * Serial episode list from fsst `playlist_iframe` Playerjs `file: [{comment,file},...]`.
+ */
+export function parseFsstPlaylistEpisodes(html: string): HlsSource[] {
+  const fileKey = html.search(/\bfile\s*:/);
+  if (fileKey < 0) return [];
+  const bracket = html.indexOf('[', fileKey);
+  if (bracket < 0) return [];
+
+  let depth = 0;
+  let end = -1;
+  let inString: '"' | "'" | null = null;
+  let escaped = false;
+  for (let i = bracket; i < html.length; i++) {
+    const ch = html[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === inString) inString = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = ch;
+      continue;
+    }
+    if (ch === '[') depth += 1;
+    else if (ch === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return [];
+
+  const literal = html.slice(bracket, end + 1);
+  const episodes: HlsSource[] = [];
+  const entryRe =
+    /\{\s*"comment"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"file"\s*:\s*"((?:\\.|[^"\\])*)"/gi;
+  let em: RegExpExecArray | null;
+  while ((em = entryRe.exec(literal))) {
+    const comment = em[1].replace(/\\(.)/g, '$1').trim();
+    const file = em[2].replace(/\\(.)/g, '$1');
+    const quality = parseFsstQualityMap(file);
+    if (!comment || !Object.keys(quality).length) continue;
+    const coords = parseFsstEpisodeComment(comment);
+    episodes.push({
+      label: comment,
+      quality,
+      ...(coords.season != null ? { season: coords.season } : {}),
+      ...(coords.episode != null ? { episode: coords.episode } : {}),
+    });
+  }
+  return episodes;
+}
+
+export type EmbedResolveOpts = {
+  season?: number;
+  episode?: number;
+};
+
+async function payloadFromEmbessSource(
+  source: EmbessSource,
+  playerUrl: string,
+  coords?: { season: number; episode: number }
+): Promise<StreamPayload | null> {
+  const masterText = await fetchText(source.hls, playerUrl, playerUrl);
+  if (!/#EXTM3U/i.test(masterText)) {
+    console.warn(
+      '[embedStreams] embess master not m3u8',
+      playerUrl,
+      masterText.slice(0, 120)
+    );
+    return null;
+  }
+  const payload = buildEmbessStreamPayload(source, masterText, source.hls);
+  /* istanbul ignore next -- buildEmbessStreamPayload always returns a payload */
+  if (!payload) return null;
+  if (coords) {
+    payload.hlsSource = payload.hlsSource.map((s) => ({
+      ...s,
+      season: coords.season,
+      episode: coords.episode,
+    }));
+  }
+  return payload;
+}
+
+export async function resolveEmbessStream(
+  playerUrl: string,
+  opts?: EmbedResolveOpts
+): Promise<StreamPayload | null> {
   try {
-    const html = await fetchText(playerUrl, `${BASE_URL}/`);
+    const html = await fetchText(playerUrl, `${BASE_URL}/`, playerUrl);
+    const playlist = parseEmbessPlaylistEpisodes(html);
+    if (playlist.length) {
+      const picked = pickEmbessPlaylistEpisode(playlist, opts?.season, opts?.episode);
+      /* istanbul ignore else -- playlist.length guarantees a pick */
+      if (picked) {
+        const fromPlaylist = await payloadFromEmbessSource(picked.source, playerUrl, {
+          season: picked.season,
+          episode: picked.episode,
+        });
+        if (fromPlaylist) return fromPlaylist;
+      }
+    }
     const source = parseEmbessSource(html);
-    if (!source) return null;
-    const masterText = await fetchText(source.hls, playerUrl);
-    if (!/#EXTM3U/i.test(masterText)) return null;
-    return buildEmbessStreamPayload(source, masterText, source.hls);
-  } catch {
+    if (!source) {
+      console.warn(
+        '[embedStreams] embess parse empty',
+        playerUrl,
+        html.length,
+        /makePlayer|hls\s*:/.test(html),
+        html.slice(0, 180).replace(/\s+/g, ' ')
+      );
+      return null;
+    }
+    return await payloadFromEmbessSource(source, playerUrl);
+  } catch (e) {
+    console.warn('[embedStreams] resolveEmbessStream failed', playerUrl, e);
     return null;
   }
 }
 
 export async function resolveFsstStream(playerUrl: string): Promise<StreamPayload | null> {
   try {
+    // Omit playerUrl arg so session falls back to newdeaf referer; MediaFetch
+    // mounts the fsst/incvideo document via the fetch URL itself.
     const html = await fetchText(playerUrl, `${BASE_URL}/`);
+
+    if (isFsstPlaylistUrl(playerUrl)) {
+      const episodes = parseFsstPlaylistEpisodes(html);
+      if (!episodes.length) {
+        console.warn('[embedStreams] fsst playlist parse empty', playerUrl, html.length);
+        return null;
+      }
+      return {
+        hlsSource: episodes,
+        tracks: [{ kind: 'captions', label: '—', src: '' }],
+        progressive: true,
+      };
+    }
     const source = parseFsstProgressiveSources(html);
-    if (!source) return null;
+    if (!source) {
+      console.warn('[embedStreams] fsst progressive parse empty', playerUrl, html.length);
+      return null;
+    }
     return {
       hlsSource: [source],
       tracks: [{ kind: 'captions', label: '—', src: '' }],
+      progressive: true,
     };
-  } catch {
+  } catch (e) {
+    console.warn('[embedStreams] resolveFsstStream failed', playerUrl, e);
     return null;
   }
 }
@@ -392,9 +751,12 @@ export async function resolveFsstStream(playerUrl: string): Promise<StreamPayloa
  * Resolve downloadable streams for non-native embeds (embess first, then fsst).
  * Both resolvers soft-fail to null — callers never need try/catch.
  */
-export async function resolveEmbedStream(playerUrl: string): Promise<StreamPayload | null> {
+export async function resolveEmbedStream(
+  playerUrl: string,
+  opts?: EmbedResolveOpts
+): Promise<StreamPayload | null> {
   if (isEmbessPlayerUrl(playerUrl)) {
-    const embess = await resolveEmbessStream(playerUrl);
+    const embess = await resolveEmbessStream(playerUrl, opts);
     if (embess?.hlsSource?.length) return embess;
   }
   if (isFsstPlayerUrl(playerUrl)) {

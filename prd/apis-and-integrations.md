@@ -1,7 +1,7 @@
 # APIs and integrations
 
 - **Status:** implemented
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-25
 - **Related code:** `src/data/catalog/`, `src/features/downloads/youtube.ts`, `src/features/downloads/MediaFetchHost.tsx`, `src/features/playback/`
 
 ## Principle
@@ -37,9 +37,10 @@
 - Search: reject site “less than 4 chars” / suspended messages via `t('catalogApi.minSearch')`.
 - EN/Latin search: if locale is `en` **or** query has no Cyrillic → `resolveRussianTitleForSearch` (TMDB); if bridged search empty → retry original query.
 - Detail: og:title, poster candidates, KP/IMDB, plot `#fltxt`, trailer YouTube embed, player iframe scoring.
-- Player pick: score native balancers (`stloadi.live`, `stravers.live`, `biorn-as.*`, `:9443`); demote preroll (−80); prefer `token_movie`, season, stravers > stloadi > biorn. Else third-party embeds.
-- Non-native **embess** download resolve: `src/data/catalog/embedStreams.ts` — fetch embed HTML, parse `makePlayer` `source.{hls,audio,cc}`, fetch master m3u8, map audio names → `HlsSource.audioId` (demuxed audio playlist URI), VTT captions → `tracks`.
-- Soft fallback **fsst** / incvideo: parse progressive `[720p]https://…mp4` (and `_360p` / `_1080p`) into a single `Default` `HlsSource`. `pickPlayerUrls` prefers embess as `playerUrl` and keeps fsst as `fallbackPlayerUrl` when both iframes exist.
+- Player pick: score native balancers (`stloadi.live`, `stravers.live`, `biorn-as.*`, `:9443`); demote preroll (−80); prefer `token_movie`, season, stravers > stloadi > biorn. Else third-party embeds. When a native iframe wins, still keep **Venom (embess/namy/domem) or fsst** as `fallbackPlayerUrl` for downloads.
+- Non-native **Venom** download resolve: `src/data/catalog/embedStreams.ts` — fetch embed HTML, parse `makePlayer` `source.{hls,audio,cc}` **or VenomPlayer `playlist.seasons[].episodes[]` (per-episode hls/audio/cc)**, fetch master m3u8, map audio names → `HlsSource.audioId` (demuxed audio playlist URI), VTT captions → `tracks`. Hosts: `api.embess.ws`, `api.namy.ws`, `api.domem.ws` (same playlist).
+- Soft fallback **fsst** / incvideo: parse progressive `[720p]https://…mp4` (and `_360p` / `_1080p`) into a single `Default` `HlsSource` with `progressive: true`. `pickPlayerUrls` prefers Venom as `playerUrl` and keeps fsst as `fallbackPlayerUrl` when both iframes exist.
+- **fsst `playlist_iframe`**: parse Playerjs episode array into multiple `HlsSource` entries (`comment` → label, season/episode from comment); progressive download with incvideo Referer.
 - `pickEpisodeEntry`: preferred translation → “Субтитры” / `id_translation === 79` → first.
 - CDN host rewrite: `newdeaf.site` → `BASE_URL` in `absolutize` (403 workaround).
 

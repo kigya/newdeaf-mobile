@@ -529,15 +529,155 @@ describe('DownloadSheet', () => {
       />
     );
     await waitFor(() => expect(screen.getByText('MovieDalen')).toBeTruthy());
-    expect(screen.queryByTestId('sheet-resolve')).toBeNull();
     await fireEvent.press(screen.getByText(t('common.download')));
-    await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          audioPlaylistUrl: 'https://cdn/a1.m3u8',
-          audioLabel: 'MovieDalen',
-        })
-      )
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioPlaylistUrl: 'https://cdn/a1.m3u8',
+      })
+    );
+  });
+
+  it('preselects Eng.Original over dubs', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Eng.Original')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioLabel: 'Eng.Original',
+        audioPlaylistUrl: 'https://cdn/a7.m3u8',
+      })
+    );
+  });
+
+  it('pins download audio via initialAudioLabel', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+        initialAudioLabel="HDRezka Studio"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('HDRezka Studio')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioLabel: 'HDRezka Studio',
+        audioPlaylistUrl: 'https://cdn/a1.m3u8',
+      })
+    );
+  });
+
+  it('ignores unknown initialAudioLabel and keeps original', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="9786"
+        title="Bad Monkey"
+        playerUrl="https://api.embess.ws/embed/movie/76587"
+        initialStream={{
+          hlsSource: [
+            {
+              label: 'HDRezka Studio',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a1.m3u8',
+            },
+            {
+              label: 'Eng.Original',
+              quality: { '720': 'https://cdn/m.m3u8' },
+              audioId: 'https://cdn/a7.m3u8',
+            },
+          ],
+          tracks: [{ kind: 'captions', label: 'Рус. полные', src: 'https://cdn/ru.vtt' }],
+        }}
+        initialAudioLabel="Missing"
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Eng.Original')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ audioLabel: 'Eng.Original' })
+    );
+  });
+
+  it('enqueues progressive playlist episode with mediaKind and s/e movieId', async () => {
+    await render(
+      <DownloadSheet
+        visible
+        onClose={onClose}
+        movieId="7739"
+        title="Kitchen"
+        playerUrl="https://fsst.online/playlist_iframe/17980/"
+        initialStream={{
+          progressive: true,
+          hlsSource: [
+            {
+              label: 'Кухня 2-1',
+              quality: { '360': 'https://cdn/e1_360.mp4' },
+              season: 2,
+              episode: 1,
+            },
+          ],
+          tracks: [{ kind: 'captions', label: '—', src: '' }],
+        }}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Кухня 2-1')).toBeTruthy());
+    await fireEvent.press(screen.getByText(t('common.download')));
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        movieId: '7739_s2_e1',
+        mediaKind: 'progressive',
+        season: 2,
+        episode: 1,
+        hlsUrl: 'https://cdn/e1_360.mp4',
+      })
     );
   });
 

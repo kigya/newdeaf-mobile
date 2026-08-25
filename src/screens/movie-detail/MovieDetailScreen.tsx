@@ -34,6 +34,7 @@ import { enrichMovieMetadata } from '@/src/data/catalog/tmdb';
 import type { MovieDetail, PlayerFileList, StreamPayload } from '@/src/data/catalog/types';
 import { ConfirmDialog } from '@/src/shared/ui/ConfirmDialog';
 import { DownloadSheet } from '@/src/shared/ui/DownloadSheet';
+import { orderAudioSources } from '@/src/features/downloads/hls';
 import { listCompletedDownloads } from '@/src/features/downloads/match';
 import { useDownloadsStore } from '@/src/features/downloads/store';
 import { useFavoritesStore } from '@/src/features/favorites/store';
@@ -64,9 +65,12 @@ export default function MovieDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloadAudioLabel, setDownloadAudioLabel] = useState<string | undefined>();
   const [stream, setStream] = useState<StreamPayload | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamLoading, setStreamLoading] = useState(false);
+  /** Embed URL that successfully resolved tracks (may be soft-fallback fsst). */
+  const [resolvedPlayerUrl, setResolvedPlayerUrl] = useState<string | undefined>(undefined);
   const [fileList, setFileList] = useState<PlayerFileList | null>(null);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
@@ -87,6 +91,7 @@ export default function MovieDetailScreen() {
     setError(null);
     setStream(null);
     setStreamError(null);
+    setResolvedPlayerUrl(undefined);
     setFileList(null);
     setResumePrompt(null);
     setKp(null);
@@ -129,6 +134,9 @@ export default function MovieDetailScreen() {
         setMovie(next);
         if (detail.season) setSeason(detail.season);
         if (detail.episode) setEpisode(detail.episode);
+        // Show detail immediately — embed/fsst resolve can take tens of seconds on
+        // devices where OkHttp hangs and Chrome iframe XHR is the fallback.
+        setLoading(false);
 
         setKpLoading(true);
         void enrichFromKinopoisk(
@@ -159,27 +167,35 @@ export default function MovieDetailScreen() {
         if (detail.playerUrl) {
           if (detail.nativePlayer !== false) {
             setStreamLoading(true);
-            const fl = await fetchPlayerFileList(detail.playerUrl);
-            if (!cancelled && fl) {
-              setFileList(fl);
-              if (fl.type === 'serial') {
-                const seasons = listSeasons(fl);
-                const latest = await fetchLatestProgressForMovie(detail.id);
-                if (
-                  latest?.season != null &&
-                  latest.episode != null &&
-                  seasons.includes(latest.season) &&
-                  listEpisodes(fl, latest.season).includes(latest.episode)
-                ) {
-                  setSeason(latest.season);
-                  setEpisode(latest.episode);
-                } else {
-                  const s = fl.active?.seasons ?? seasons[0] ?? 1;
-                  const eps = listEpisodes(fl, s);
-                  const e = fl.active?.episode ?? eps[0] ?? 1;
-                  setSeason(s);
-                  setEpisode(e);
+            try {
+              const fl = await fetchPlayerFileList(detail.playerUrl);
+              if (!cancelled && fl) {
+                setFileList(fl);
+                if (fl.type === 'serial') {
+                  const seasons = listSeasons(fl);
+                  const latest = await fetchLatestProgressForMovie(detail.id);
+                  if (
+                    latest?.season != null &&
+                    latest.episode != null &&
+                    seasons.includes(latest.season) &&
+                    listEpisodes(fl, latest.season).includes(latest.episode)
+                  ) {
+                    setSeason(latest.season);
+                    setEpisode(latest.episode);
+                  } else {
+                    const s = fl.active?.seasons ?? seasons[0] ?? 1;
+                    const eps = listEpisodes(fl, s);
+                    const e = fl.active?.episode ?? eps[0] ?? 1;
+                    setSeason(s);
+                    setEpisode(e);
+                  }
                 }
+              }
+            } finally {
+              if (!cancelled) {
+                const embedFallback =
+                  detail.fallbackPlayerUrl && isResolvableEmbedUrl(detail.fallbackPlayerUrl);
+                if (!embedFallback) setStreamLoading(false);
               }
             }
           } else {
@@ -193,26 +209,38 @@ export default function MovieDetailScreen() {
               setStreamError(null);
               try {
                 let embed: StreamPayload | null = null;
+                let wonUrl: string | undefined;
                 for (const url of candidates) {
                   embed = await resolveEmbedStream(url);
                   /* istanbul ignore next -- unmount during embed resolve */
                   if (cancelled) return;
-                  if (embed?.hlsSource?.length) break;
+                  if (embed?.hlsSource?.length) {
+                    wonUrl = url;
+                    break;
+                  }
                 }
                 /* istanbul ignore next -- unmount during embed resolve */
                 if (cancelled) return;
-                if (embed?.hlsSource?.length) {
+                if (embed?.hlsSource?.length && wonUrl) {
                   setStream(embed);
+                  setResolvedPlayerUrl(wonUrl);
                   setStreamError(null);
+                  if (embed.hlsSource[0]?.season != null) {
+                    setSeason(embed.hlsSource[0].season);
+                  }
+                  if (embed.hlsSource[0]?.episode != null) {
+                    setEpisode(embed.hlsSource[0].episode);
+                  }
                 } else {
                   setStreamError(t('movie.tracksUnavailable'));
                 }
-                setStreamLoading(false);
               } catch {
                 /* istanbul ignore next -- unmount during embed resolve */
                 if (cancelled) return;
                 setStreamError(t('movie.tracksUnavailable'));
-                setStreamLoading(false);
+              } finally {
+                /* istanbul ignore next -- unmount during embed resolve */
+                if (!cancelled) setStreamLoading(false);
               }
             } else {
               setStreamLoading(false);
@@ -256,10 +284,36 @@ export default function MovieDetailScreen() {
     );
   }, [movie?.id, downloads, isSerial, season, episode]);
 
+  const embedDownloadUrl = useMemo(() => {
+    if (!movie) return undefined;
+    if (resolvedPlayerUrl && isResolvableEmbedUrl(resolvedPlayerUrl)) {
+      return resolvedPlayerUrl;
+    }
+    if (movie.fallbackPlayerUrl && isResolvableEmbedUrl(movie.fallbackPlayerUrl)) {
+      return movie.fallbackPlayerUrl;
+    }
+    if (
+      movie.nativePlayer === false &&
+      movie.playerUrl &&
+      isResolvableEmbedUrl(movie.playerUrl)
+    ) {
+      return movie.playerUrl;
+    }
+    return undefined;
+  }, [movie, resolvedPlayerUrl]);
+
+  const downloadBlocked = !stream?.hlsSource?.length &&
+    (movie?.nativePlayer === false || !!embedDownloadUrl);
+
+  const displayAudioSources = useMemo(
+    () => (stream?.hlsSource?.length ? orderAudioSources(stream.hlsSource) : []),
+    [stream]
+  );
+
   const activePlayerUrl = useMemo(() => {
     if (!movie?.playerUrl) return undefined;
-    // Non-native embeds: use as-is (no season/episode rewrite).
-    if (movie.nativePlayer === false) return movie.playerUrl;
+    // Non-native embeds: prefer the URL that actually resolved tracks (soft-fallback).
+    if (movie.nativePlayer === false) return resolvedPlayerUrl ?? movie.playerUrl;
     if (!isSerial || !fileList) return movie.playerUrl;
     const entry = pickEpisodeEntry(
       fileList,
@@ -272,7 +326,7 @@ export default function MovieDetailScreen() {
       episode,
       translation: entry?.id_translation ?? movie.translationId,
     });
-  }, [movie, isSerial, fileList, season, episode]);
+  }, [movie, isSerial, fileList, season, episode, resolvedPlayerUrl]);
 
   const openPlayer = useCallback(
     async (opts: { resume: boolean; progress?: WatchProgressRecord | null }) => {
@@ -348,10 +402,51 @@ export default function MovieDetailScreen() {
       // Resolvable embeds: stream is filled by detail-load effect.
       return;
     }
+    if (movie?.fallbackPlayerUrl && isResolvableEmbedUrl(movie.fallbackPlayerUrl)) {
+      // Native + embess/fsst sibling: tracks come from the embed playlist, not bnsi.
+      return;
+    }
     setStream(null);
     setStreamError(null);
     setStreamLoading(true);
-  }, [activePlayerUrl, movie?.nativePlayer]);
+  }, [activePlayerUrl, movie?.nativePlayer, movie?.fallbackPlayerUrl]);
+
+  useEffect(() => {
+    if (!movie || movie.nativePlayer === false) return;
+    const fallback = movie.fallbackPlayerUrl;
+    if (!fallback || !isResolvableEmbedUrl(fallback)) return;
+    let cancelled = false;
+    setStreamLoading(true);
+    setStreamError(null);
+    void resolveEmbedStream(fallback, { season, episode })
+      .then((embed) => {
+        /* istanbul ignore next -- unmount during sibling resolve */
+        if (cancelled) return;
+        if (embed?.hlsSource?.length) {
+          setStream(embed);
+          setResolvedPlayerUrl(fallback);
+          setStreamError(null);
+        } else {
+          setStream(null);
+          setResolvedPlayerUrl(undefined);
+          setStreamError(t('movie.tracksUnavailable'));
+        }
+      })
+      .catch(() => {
+        /* istanbul ignore next -- unmount during sibling resolve */
+        if (cancelled) return;
+        setStream(null);
+        setResolvedPlayerUrl(undefined);
+        setStreamError(t('movie.tracksUnavailable'));
+      })
+      .finally(() => {
+        /* istanbul ignore else -- unmount during sibling resolve */
+        if (!cancelled) setStreamLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [movie, season, episode]);
 
   const onStreamResolved = useCallback((data: StreamPayload) => {
     setStream(data);
@@ -710,16 +805,26 @@ export default function MovieDetailScreen() {
                 {streamError && !stream ? (
                   <Text style={styles.tracksHint}>{streamError}</Text>
                 ) : null}
-                {stream?.hlsSource?.length ? (
+                {displayAudioSources.length ? (
                   <>
                     <Text style={styles.chipLabel}>{t('movie.audio')}</Text>
                     <View style={styles.chips}>
-                      {stream.hlsSource.map((source, index) => (
-                        <View key={`${source.label}-${index}`} style={styles.chip}>
-                          <Text style={styles.chipText} numberOfLines={2}>
+                      {displayAudioSources.map((source, index) => (
+                        <Pressable
+                          key={`${source.label}-${index}`}
+                          onPress={() => {
+                            setDownloadAudioLabel(source.label);
+                            setDownloadOpen(true);
+                          }}
+                          style={[styles.chip, index === 0 && styles.chipActive]}
+                        >
+                          <Text
+                            style={[styles.chipText, index === 0 && styles.chipTextActive]}
+                            numberOfLines={2}
+                          >
                             {source.label}
                           </Text>
-                        </View>
+                        </Pressable>
                       ))}
                     </View>
                   </>
@@ -740,7 +845,10 @@ export default function MovieDetailScreen() {
                     </View>
                   </>
                 ) : null}
-                {streamLoading && !stream && movie.nativePlayer !== false ? (
+                {streamLoading &&
+                !stream &&
+                movie.nativePlayer !== false &&
+                !(movie.fallbackPlayerUrl && isResolvableEmbedUrl(movie.fallbackPlayerUrl)) ? (
                   <View style={styles.hiddenResolver} pointerEvents="none">
                     <StreamResolver
                       key={activePlayerUrl}
@@ -829,7 +937,7 @@ export default function MovieDetailScreen() {
             colors={['transparent', colors.bg]}
             style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}
           >
-            {movie.nativePlayer === false && !stream?.hlsSource?.length ? (
+            {downloadBlocked && !streamLoading ? (
               <Text style={styles.downloadHint}>{t('movie.downloadUnavailable')}</Text>
             ) : null}
             <View style={styles.ctaRow}>
@@ -844,12 +952,11 @@ export default function MovieDetailScreen() {
                 style={[
                   styles.btn,
                   styles.btnSecondary,
-                  (!activePlayerUrl ||
-                    (movie.nativePlayer === false && !stream?.hlsSource?.length)) &&
-                    styles.btnDisabled,
+                  (!activePlayerUrl || downloadBlocked) && styles.btnDisabled,
                 ]}
                 onPress={() => {
-                  if (movie.nativePlayer === false && !stream?.hlsSource?.length) return;
+                  if (downloadBlocked) return;
+                  setDownloadAudioLabel(undefined);
                   setDownloadOpen(true);
                 }}
               >
@@ -868,8 +975,9 @@ export default function MovieDetailScreen() {
               }
               title={displayTitle}
               posterUrl={movie.posterUrl}
-              playerUrl={activePlayerUrl}
+              playerUrl={embedDownloadUrl ?? activePlayerUrl}
               initialStream={stream}
+              initialAudioLabel={downloadAudioLabel}
               season={isSerial ? season : undefined}
               episode={isSerial ? episode : undefined}
             />
