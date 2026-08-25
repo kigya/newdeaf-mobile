@@ -102,3 +102,19 @@ Feature modules follow `store.ts` + `db.ts` + `types.ts` under `src/features/*`.
 - Restructuring the whole app to match a generic Expo template
 - EAS / App Store / Play Store shipping setup
 - Adding ESLint/Prettier or Detox/Maestro E2E from scratch
+
+## Cursor Cloud specific instructions
+
+Durable notes for agents running in the Cursor Cloud VM (deps already installed by the startup update script).
+
+- **Install needs `--legacy-peer-deps`.** Plain `npm install` / `npm ci` fail with `ERESOLVE`: `jest-expo@57.0.3` needs peer `@react-native/jest-preset@^0.86.2`, but `react-native@0.86.0` pins it to exactly `0.86.0`. Use `npm ci --legacy-peer-deps` (or `npm install --legacy-peer-deps`). Do not "fix" this by editing `package.json` versions.
+- **What runs here:** `npm run typecheck` and `npm test` (Jest, `__tests__/`) both pass and are the primary gates. Full JS build is verified with `npx expo export --platform android` (produces a Hermes `.hbc` bundle in `dist/`, which is gitignored).
+- **Optional enrichment secrets:** `EXPO_PUBLIC_TMDB_API_KEY`, `EXPO_PUBLIC_TMDB_READ_TOKEN`, `EXPO_PUBLIC_KINOPOISK_API_KEY` soft-fail if missing. When present in the Cloud Agent env, Expo picks them up as `EXPO_PUBLIC_*` — do **not** commit a `.env` with real keys.
+- **Android emulator (software / TCG only).** `/dev/kvm` is **not** available in this VM (no nested KVM / no `modprobe`). SDK lives at `~/Android/Sdk` (also exported from `~/.bashrc`). AVD name: `NewDeaf_API35` (`system-images;android-35;google_apis;x86_64`). Boot with:
+  ```bash
+  export DISPLAY=:1
+  emulator -avd NewDeaf_API35 -accel off -gpu guest -no-snapshot -no-audio -no-boot-anim -memory 2048 -cores 2 -skin 1080x2400
+  ```
+  Prefer **`-gpu guest`** (SwiftShader host window was ~1×21 and `screencap` stayed black). Cold boot on TCG takes several minutes; wait for `adb shell getprop sys.boot_completed` → `1`. Native `android/` is still generated on demand by `expo run:android` / `expo prebuild` (not committed).
+- **Expo web is not a substitute.** `expo-sqlite`'s web build imports `wa-sqlite/wa-sqlite.wasm`, which is not shipped here, so `expo export --platform web` fails at `src/downloads/db.ts`.
+- **Exercise core functionality without a device.** The scraper in `src/api/` (`client.ts`, `parse.ts`, `types.ts`, `win1251.ts`) is pure TypeScript with no native imports and can be run in Node (e.g. via `npx tsx`) against the live site `https://newdeaf.top` (egress works) to verify catalog / search / detail parsing end-to-end. Avoid importing `src/api/catalog.ts` directly in Node — it pulls in `@/src/i18n` → `expo-localization` (native).
