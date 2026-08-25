@@ -2,13 +2,17 @@ jest.mock('@/src/data/catalog/client', () => ({
   fetchHtml: jest.fn(),
 }));
 
-jest.mock('@/src/data/catalog/parse', () => ({
-  parseCatalogPage: jest.fn(),
-  parseMovieDetail: jest.fn(),
-  parseMovieList: jest.fn(),
-  parsePlayerFileList: jest.fn(),
-  parseSearchResults: jest.fn(),
-}));
+jest.mock('@/src/data/catalog/parse', () => {
+  const actual = jest.requireActual('@/src/data/catalog/parse') as typeof import('@/src/data/catalog/parse');
+  return {
+    parseCatalogPage: jest.fn(),
+    parseMovieDetail: jest.fn(),
+    parseMovieList: jest.fn(),
+    parsePlayerFileList: jest.fn(),
+    parseSearchResults: jest.fn(),
+    parseMovieIdFromHref: actual.parseMovieIdFromHref,
+  };
+});
 
 jest.mock('@/src/data/catalog/tmdb', () => ({
   resolveRussianTitleForSearch: jest.fn(),
@@ -35,6 +39,7 @@ import {
   fetchHomeMovies,
   fetchMovieDetail,
   fetchPlayerFileList,
+  fetchSitePopular,
   getGenres,
   searchMovies,
 } from '@/src/data/catalog/catalog';
@@ -57,6 +62,12 @@ describe('catalog api', () => {
 
     await fetchHomeMovies(3);
     expect(fetchHtml).toHaveBeenCalledWith('/page/3/');
+  });
+
+  it('fetchSitePopular reads homepage carousel', async () => {
+    (fetchHtml as jest.Mock).mockResolvedValue('<div id="owl-popular"></div>');
+    await fetchSitePopular();
+    expect(fetchHtml).toHaveBeenCalledWith('/');
   });
 
   it('fetchGenreMovies normalizes trailing slash and pages', async () => {
